@@ -68,6 +68,21 @@ where
 
     pub fn process(&mut self) -> core::result::Result<(), DapError> {
         self.process_out_packet().ok();
+
+        // A new request arrived while a previous response is still buffered
+        // and unsent. We advertise Packet Count = 1, so a compliant host never
+        // issues the next command before reading the prior reply; a fresh
+        // request therefore means that reply will never be consumed (the
+        // original requester is gone — e.g. a killed or a second probe-rs).
+        // Keeping it would head-of-line block the new request forever: the
+        // buffered reply is only retried on the next USB event, which never
+        // comes because the requester is now waiting for *its* answer, so the
+        // probe stops responding until a USB bus reset. Drop the unconsumed
+        // response and serve the new request.
+        if self.pending_out_packet_size > 0 && self.next_in_packet_size.is_some() {
+            self.next_in_packet_size = None;
+        }
+
         if self.pending_out_packet_size == 0 || self.next_in_packet_size.is_some() {
             self.send_next_packet().ok();
             return Ok(());
@@ -172,7 +187,11 @@ where
         self.inner.get_string(index, lang_id)
     }
     fn reset(&mut self) {
-        self.inner.reset()
+        self.inner.reset();
+        // A USB bus reset ends the previous session; any buffered request or
+        // response is now stale and must not leak into the next one.
+        self.pending_out_packet_size = 0;
+        self.next_in_packet_size = None;
     }
     fn control_in(&mut self, xfer: ControlIn<B>) {
         self.inner.control_in(xfer)
