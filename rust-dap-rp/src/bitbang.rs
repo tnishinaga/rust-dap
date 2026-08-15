@@ -14,10 +14,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Bit-banging transports over RP2040 GPIO pins.
+//! Bit-banging transports over RP2040/RP2350 GPIO pins.
 
+use crate::hal;
 use hal::gpio::{FunctionSio, Pin, PinId, PullNone, SioInput, SioOutput, ValidFunction};
-use rp2040_hal as hal;
 use rust_dap::bitbang::{BidirPin, BitBangJtag, BitBangSwd, BitBangSwj};
 use rust_dap::Delay;
 
@@ -31,12 +31,12 @@ impl<I> BidirPinId for I where
 {
 }
 
-/// A floating input pin in rp2040-hal 0.10's 3-parameter GPIO type-state.
+/// A floating input pin in the RP HAL's 3-parameter GPIO type-state.
 pub type FloatingInput<I> = Pin<I, FunctionSio<SioInput>, PullNone>;
 /// A push-pull output pin (pull preserved as none from the input state).
 pub type PushPullOutput<I> = Pin<I, FunctionSio<SioOutput>, PullNone>;
 
-/// Bidirectional pin backed by the rp2040-hal type-state GPIO API.
+/// Bidirectional pin backed by the RP HAL type-state GPIO API.
 /// Holds the pin as an enum of its two mode states, so one type covers
 /// both directions without the IoPin input/output type pair.
 pub enum PicoBidirPin<I: BidirPinId> {

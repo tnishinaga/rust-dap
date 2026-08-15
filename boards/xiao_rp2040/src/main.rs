@@ -36,7 +36,7 @@ pub static BOOT2_FIRMWARE: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 /// the hal entry point would normally release must be released here.
 #[cortex_m_rt::pre_init]
 unsafe fn pre_init() {
-    rust_dap_rp2040::clear_spinlocks();
+    rust_dap_rp::clear_spinlocks();
 }
 
 #[rtic::app(device = rp_pico::hal::pac, peripherals = true, dispatchers = [PIO1_IRQ_0])]
@@ -57,9 +57,9 @@ mod app {
     use embedded_hal::digital::{OutputPin, StatefulOutputPin};
 
     use rust_dap::{DapConfig, DapIdentity};
-    use rust_dap_rp2040::line_coding::*;
-    use rust_dap_rp2040::util::{UartConfigAndClock, UsbIdentity};
-    type SwdIoSet = rust_dap_rp2040::util::SwdIoSet<GpioSwClk, GpioSwdIo, GpioReset>;
+    use rust_dap_rp::line_coding::*;
+    use rust_dap_rp::util::{UartConfigAndClock, UsbIdentity};
+    type SwdIoSet = rust_dap_rp::util::SwdIoSet<GpioSwClk, GpioSwdIo, GpioReset>;
     type UsbDap = rust_dap::CmsisDap<'static, UsbBus, SwdIoSet, 64>;
 
     // GPIO mappings
@@ -82,7 +82,7 @@ mod app {
         hal::gpio::Pin<GpioUartTx, FunctionUart, PullDown>,
         hal::gpio::Pin<GpioUartRx, FunctionUart, PullDown>,
     );
-    use rust_dap_rp2040::bridge::{self, UartReader, UartWriter};
+    use rust_dap_rp::bridge::{self, UartReader, UartWriter};
 
     #[shared]
     struct Shared {
@@ -171,7 +171,7 @@ mod app {
             let swdio;
             #[cfg(feature = "bitbang")]
             {
-                use rust_dap_rp2040::bitbang::{CortexMDelay, PicoBidirPin};
+                use rust_dap_rp::bitbang::{CortexMDelay, PicoBidirPin};
                 let swclk_pin = PicoBidirPin::new(pins.gpio2.into_floating_input());
                 let swdio_pin = PicoBidirPin::new(pins.gpio4.into_floating_input());
                 let reset_pin = PicoBidirPin::new(reset_pin);
@@ -188,7 +188,7 @@ mod app {
                 reset_pin.set_slew_rate(hal::gpio::OutputSlewRate::Fast);
                 swdio = SwdIoSet::new(c.device.PIO0, swclk_pin, swdio_pin, reset_pin, &mut resets);
             }
-            rust_dap_rp2040::util::initialize_usb(
+            rust_dap_rp::util::initialize_usb(
                 swdio,
                 usb_allocator,
                 UsbIdentity {

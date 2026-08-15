@@ -52,9 +52,9 @@ use hal::pac;
 use rust_dap::{
     DapConfig, DapIdentity, USB_CLASS_MISCELLANEOUS, USB_PROTOCOL_IAD, USB_SUBCLASS_COMMON,
 };
-use rust_dap_rp2040::bitbang::{CortexMDelay, PicoBidirPin, SwdIoSet};
+use rust_dap_rp::bitbang::{CortexMDelay, PicoBidirPin, SwdIoSet};
 #[allow(unused_imports)]
-use rust_dap_rp2040::bridge::{UartReader, UartWriter};
+use rust_dap_rp::bridge::{UartReader, UartWriter};
 use usb_device::prelude::*;
 use usbd_serial::SerialPort;
 
@@ -1818,7 +1818,7 @@ impl Connection for ConnRef<'_> {
 /// the hal entry point would normally release must be released here.
 #[cortex_m_rt::pre_init]
 unsafe fn pre_init() {
-    rust_dap_rp2040::clear_spinlocks();
+    rust_dap_rp::clear_spinlocks();
 }
 
 /// Set by the USB task once the host has configured the device. A plain
@@ -2060,7 +2060,7 @@ mod app {
         #[cfg(feature = "uart-bridge")]
         usb_dev.poll(&mut [serial, rtt_serial, uart_serial]);
         // 1200 bps touch → reboot into the bootloader (reflash without BOOTSEL).
-        rust_dap_rp2040::util::bootsel_on_1200bps_touch(serial);
+        rust_dap_rp::util::bootsel_on_1200bps_touch(serial);
         USB_CONFIGURED.store(
             usb_dev.state() == UsbDeviceState::Configured,
             core::sync::atomic::Ordering::Relaxed,
@@ -2111,7 +2111,7 @@ mod app {
         // UART can drain back-pressures the host CDC (NAK) instead of dropping.
         #[cfg(feature = "uart-bridge")]
         {
-            use rust_dap_rp2040::bridge;
+            use rust_dap_rp::bridge;
             bridge::drain_uart_rx_queue(uart_serial, ctx.local.uart_rx_cons);
             bridge::drain_usb_to_uart_tx(uart_serial, ctx.local.uart_tx_prod);
             bridge::drain_uart_tx_queue(ctx.local.uart_writer, ctx.local.uart_tx_cons);
@@ -2279,6 +2279,6 @@ fn reset_self(site: u32) -> ! {
     }
     // Detach from USB cleanly first — rebooting mid-enumeration can wedge
     // the host's hub port (see util::usb_detach_for_reset).
-    rust_dap_rp2040::util::usb_detach_for_reset();
+    rust_dap_rp::util::usb_detach_for_reset();
     cortex_m::peripheral::SCB::sys_reset();
 }

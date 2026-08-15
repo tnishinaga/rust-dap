@@ -14,16 +14,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::hal;
+use crate::pio_crate as pio;
 use cortex_m::asm;
 use hal::{
     gpio::PinId,
     pac::{self, PIO0},
     pio::PIOExt,
 };
-use rp2040_hal as hal;
 use rust_dap::*;
 pub mod pio0 {
-    use crate::pio::hal::{self, gpio::FunctionPio0};
+    use crate::hal::{self, gpio::FunctionPio0};
     pub type Pin<P> = hal::gpio::Pin<P, FunctionPio0, hal::gpio::PullDown>;
 }
 use bitvec::prelude::*;

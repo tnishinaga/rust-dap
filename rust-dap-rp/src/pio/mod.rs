@@ -15,10 +15,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::pio_crate as pio;
 use pio::Program;
-use rp2040_hal as hal;
 pub mod pio0 {
-    use crate::pio::hal::{self, gpio::FunctionPio0};
+    use crate::hal::{self, gpio::FunctionPio0};
     pub type Pin<P> = hal::gpio::Pin<P, FunctionPio0, hal::gpio::PullDown>;
 }
 

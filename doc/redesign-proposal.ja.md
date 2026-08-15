@@ -190,7 +190,7 @@ pub trait CycleDelay {
 
 ## 4. ボード抽象化レイヤの分離(項目4)
 
-### 4.1 rust-dap-rp2040 の責務整理
+### 4.1 rust-dap-rp の責務整理
 
 | 現状 | 提案 |
 |---|---|
@@ -202,7 +202,7 @@ pub trait CycleDelay {
 ### 4.2 USB-UART ブリッジの共通化
 
 RTIC の `#[app]` はマクロの制約でライブラリ化できないが、タスク本体は関数化できる。
-rust-dap-rp2040 に `bridge` モジュールを新設する:
+rust-dap-rp に `bridge` モジュールを新設する:
 
 ```rust
 pub struct UartBridge<const RX_N: usize, const TX_N: usize> {
@@ -227,7 +227,7 @@ rpi_pico と xiao_rp2040 の差分はピン割当てと `UsbIdentity` のみに�
 
 ```toml
 [workspace]
-members = ["rust-dap", "rust-dap-rp2040", "boards/rpi_pico", "boards/xiao_rp2040", "boards/xiao_m0"]
+members = ["rust-dap", "rust-dap-rp", "boards/rpi_pico", "boards/xiao_rp2040", "boards/xiao_m0"]
 default-members = ["rust-dap"]
 resolver = "2"
 ```

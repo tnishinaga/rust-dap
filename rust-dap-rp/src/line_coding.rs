@@ -14,8 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::hal;
 use hal::uart;
-use rp2040_hal as hal;
 use usbd_serial;
 
 use core::convert::{From, TryFrom};

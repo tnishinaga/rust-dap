@@ -14,11 +14,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::pio_crate as pio;
 use cortex_m::asm;
 use pio::Program;
 use rust_dap::*;
 // use rust_dap::{SwdIo, SwdIoConfig, SwdRequest, DapError};
 // use rust_dap::{DAP_TRANSFER_OK, DAP_TRANSFER_WAIT, DAP_TRANSFER_FAULT, /* DAP_TRANSFER_ERROR, */ DAP_TRANSFER_MISMATCH};
+use crate::hal;
 use crate::pio::*;
 use hal::gpio::PinId;
 use hal::pac::{self, PIO0};

@@ -36,7 +36,7 @@ pub static BOOT2_FIRMWARE: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 /// the hal entry point would normally release must be released here.
 #[cortex_m_rt::pre_init]
 unsafe fn pre_init() {
-    rust_dap_rp2040::clear_spinlocks();
+    rust_dap_rp::clear_spinlocks();
 }
 
 #[rtic::app(device = rp_pico::hal::pac, peripherals = true, dispatchers = [PIO1_IRQ_0])]
@@ -59,14 +59,14 @@ mod app {
 
     use embedded_hal::digital::{OutputPin, StatefulOutputPin};
 
-    use rust_dap_rp2040::line_coding::*;
-    use rust_dap_rp2040::util::UartConfigAndClock;
+    use rust_dap_rp::line_coding::*;
+    use rust_dap_rp::util::UartConfigAndClock;
     // util::SwdIoSet/JtagIoSet select the PIO or bit-banging transport via
     // the `bitbang` feature.
     #[cfg(feature = "swd")]
-    type SwdIoSet = rust_dap_rp2040::util::SwdIoSet<GpioSwClk, GpioSwdIo, GpioReset>;
+    type SwdIoSet = rust_dap_rp::util::SwdIoSet<GpioSwClk, GpioSwdIo, GpioReset>;
     #[cfg(feature = "jtag")]
-    type JtagIoSet = rust_dap_rp2040::util::JtagIoSet<
+    type JtagIoSet = rust_dap_rp::util::JtagIoSet<
         JtagTckPin,
         JtagTmsPin,
         JtagTdiPin,
@@ -77,7 +77,7 @@ mod app {
     // Combined SWD+JTAG transport with runtime DAP_Connect(port) switching
     // over one shared pin set (bit-banging only).
     #[cfg(feature = "swj")]
-    type SwjIoSet = rust_dap_rp2040::bitbang::SwjIoSet<
+    type SwjIoSet = rust_dap_rp::bitbang::SwjIoSet<
         GpioSwClk,
         GpioSwdIo,
         JtagTdiPin,
@@ -130,7 +130,7 @@ mod app {
         hal::gpio::Pin<GpioUartTx, FunctionUart, PullDown>,
         hal::gpio::Pin<GpioUartRx, FunctionUart, PullDown>,
     );
-    use rust_dap_rp2040::bridge::{self, UartReader, UartWriter};
+    use rust_dap_rp::bridge::{self, UartReader, UartWriter};
 
     #[shared]
     struct Shared {
@@ -212,8 +212,8 @@ mod app {
         #[cfg(all(feature = "swd", feature = "bitbang"))]
         let (usb_serial, usb_dap, usb_bus) = {
             use rust_dap::{DapConfig, DapIdentity};
-            use rust_dap_rp2040::bitbang::{CortexMDelay, PicoBidirPin};
-            use rust_dap_rp2040::util::UsbIdentity;
+            use rust_dap_rp::bitbang::{CortexMDelay, PicoBidirPin};
+            use rust_dap_rp::util::UsbIdentity;
             // Initialize MCU reset pin.
             // RESET pin of Cortex Debug 10-pin connector is negative logic
             // https://developer.arm.com/documentation/101453/0100/CoreSight-Technology/Connectors
@@ -221,7 +221,7 @@ mod app {
             let swclk_pin = PicoBidirPin::new(pins.gpio2.into_floating_input());
             let swdio_pin = PicoBidirPin::new(pins.gpio3.into_floating_input());
             let swdio = SwdIoSet::new(swclk_pin, swdio_pin, reset_pin, CortexMDelay);
-            rust_dap_rp2040::util::initialize_usb(
+            rust_dap_rp::util::initialize_usb(
                 swdio,
                 usb_allocator,
                 UsbIdentity {
@@ -242,7 +242,7 @@ mod app {
         #[cfg(all(feature = "swd", not(feature = "bitbang")))]
         let (usb_serial, usb_dap, usb_bus) = {
             use rust_dap::{DapConfig, DapIdentity};
-            use rust_dap_rp2040::util::UsbIdentity;
+            use rust_dap_rp::util::UsbIdentity;
             // Initialize MCU reset pin.
             // RESET pin of Cortex Debug 10-pin connector is negative logic
             // https://developer.arm.com/documentation/101453/0100/CoreSight-Technology/Connectors
@@ -254,7 +254,7 @@ mod app {
             reset_pin.set_slew_rate(hal::gpio::OutputSlewRate::Fast);
 
             let swdio = SwdIoSet::new(c.device.PIO0, swclk_pin, swdio_pin, reset_pin, &mut resets);
-            rust_dap_rp2040::util::initialize_usb(
+            rust_dap_rp::util::initialize_usb(
                 swdio,
                 usb_allocator,
                 UsbIdentity {
@@ -275,8 +275,8 @@ mod app {
         #[cfg(all(feature = "jtag", feature = "bitbang"))]
         let (usb_serial, usb_dap, usb_bus) = {
             use rust_dap::{DapConfig, DapIdentity};
-            use rust_dap_rp2040::bitbang::{CortexMDelay, PicoBidirPin};
-            use rust_dap_rp2040::util::UsbIdentity;
+            use rust_dap_rp::bitbang::{CortexMDelay, PicoBidirPin};
+            use rust_dap_rp::util::UsbIdentity;
             let tck_pin = PicoBidirPin::new(pins.gpio2.into_floating_input());
             let tms_pin = PicoBidirPin::new(pins.gpio3.into_floating_input());
             let tdo_pin = PicoBidirPin::new(pins.gpio5.into_floating_input());
@@ -292,7 +292,7 @@ mod app {
                 srst_pin,
                 CortexMDelay,
             );
-            rust_dap_rp2040::util::initialize_usb(
+            rust_dap_rp::util::initialize_usb(
                 jtagio,
                 usb_allocator,
                 UsbIdentity {
@@ -313,7 +313,7 @@ mod app {
         #[cfg(all(feature = "jtag", not(feature = "bitbang")))]
         let (usb_serial, usb_dap, usb_bus) = {
             use rust_dap::{DapConfig, DapIdentity};
-            use rust_dap_rp2040::util::UsbIdentity;
+            use rust_dap_rp::util::UsbIdentity;
             // PIO
             let mut tck_pin = pins.gpio2.into_function::<hal::gpio::FunctionPio0>();
             let mut tms_pin = pins.gpio3.into_function::<hal::gpio::FunctionPio0>();
@@ -337,7 +337,7 @@ mod app {
                 Some(srst_pin),
                 &mut resets,
             );
-            rust_dap_rp2040::util::initialize_usb(
+            rust_dap_rp::util::initialize_usb(
                 jtagio,
                 usb_allocator,
                 UsbIdentity {
@@ -361,8 +361,8 @@ mod app {
         #[cfg(feature = "swj")]
         let (usb_serial, usb_dap, usb_bus) = {
             use rust_dap::{DapConfig, DapIdentity};
-            use rust_dap_rp2040::bitbang::{CortexMDelay, PicoBidirPin};
-            use rust_dap_rp2040::util::UsbIdentity;
+            use rust_dap_rp::bitbang::{CortexMDelay, PicoBidirPin};
+            use rust_dap_rp::util::UsbIdentity;
             let clk_pin = PicoBidirPin::new(pins.gpio2.into_floating_input()); // SWCLK/TCK
             let dio_pin = PicoBidirPin::new(pins.gpio3.into_floating_input()); // SWDIO/TMS
             let tdi_pin = PicoBidirPin::new(pins.gpio6.into_floating_input());
@@ -378,7 +378,7 @@ mod app {
                 srst_pin,
                 CortexMDelay,
             );
-            rust_dap_rp2040::util::initialize_usb(
+            rust_dap_rp::util::initialize_usb(
                 swjio,
                 usb_allocator,
                 UsbIdentity {

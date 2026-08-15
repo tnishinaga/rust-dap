@@ -33,7 +33,7 @@ use rp_pico::hal;
 use hal::clocks::Clock;
 use hal::pac;
 use rust_dap::{DapConfig, DapIdentity};
-use rust_dap_rp2040::bitbang::{CortexMDelay, PicoBidirPin, SwdIoSet};
+use rust_dap_rp::bitbang::{CortexMDelay, PicoBidirPin, SwdIoSet};
 use usb_device::class_prelude::UsbBusAllocator;
 use usb_device::prelude::*;
 use usbd_serial::SerialPort;
@@ -192,7 +192,7 @@ fn main() -> ! {
     let mut throttle: u32 = 0;
     loop {
         usb_dev.poll(&mut [&mut serial]);
-        rust_dap_rp2040::util::bootsel_on_1200bps_touch(&serial);
+        rust_dap_rp::util::bootsel_on_1200bps_touch(&serial);
         if usb_dev.state() != UsbDeviceState::Configured {
             continue;
         }

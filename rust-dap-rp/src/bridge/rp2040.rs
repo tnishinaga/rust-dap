@@ -18,6 +18,7 @@
 //! applications. RTIC's `#[app]` macro cannot live in a library, so the
 //! boards keep their task skeletons and call into these functions.
 
+use crate::hal;
 use crate::line_coding::UartConfig;
 use crate::util::{read_usb_serial_byte_cs, write_usb_serial_byte_cs, UartConfigAndClock};
 use embedded_hal_nb::serial::{Read, Write};
@@ -25,7 +26,6 @@ use hal::pac::{UART0, UART1};
 use hal::uart::{Enabled, Reader, UartDevice, UartPeripheral, ValidUartPinout, Writer};
 use hal::usb::UsbBus;
 use heapless::spsc::{Consumer, Producer};
-use rp2040_hal as hal;
 use usbd_serial::SerialPort;
 
 /// UART reader half, wrapped so it can be an RTIC shared resource.

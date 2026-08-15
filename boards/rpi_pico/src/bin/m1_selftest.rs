@@ -31,7 +31,7 @@ use rp_pico::hal;
 use hal::clocks::Clock;
 use hal::pac;
 use rust_dap::{DapConfig, DapIdentity};
-use rust_dap_rp2040::bitbang::{CortexMDelay, PicoBidirPin, SwdIoSet};
+use rust_dap_rp::bitbang::{CortexMDelay, PicoBidirPin, SwdIoSet};
 use usb_device::class_prelude::UsbBusAllocator;
 use usb_device::prelude::*;
 use usbd_serial::SerialPort;
@@ -193,7 +193,7 @@ fn main() -> ! {
     loop {
         usb_dev.poll(&mut [&mut serial]);
         // 1200 bps touch → reboot into the bootloader (reflash without BOOTSEL).
-        rust_dap_rp2040::util::bootsel_on_1200bps_touch(&serial);
+        rust_dap_rp::util::bootsel_on_1200bps_touch(&serial);
         if result.is_none() && usb_dev.state() == UsbDeviceState::Configured {
             result = Some(run_selftest(&mut arm));
         }
