@@ -22,10 +22,11 @@ jobs:
         run: |
           apt-get update && apt-get -y install git
           rustup target add thumbv6m-none-eabi
+          rustup target add thumbv8m.main-none-eabihf
           # --no-default-features drops elf2uf2-rs's auto-deploy feature, whose
           # libudev-sys dependency needs pkg-config + libudev (absent in the
           # slim container). The ELF->UF2 conversion itself needs neither.
-          cargo install elf2uf2-rs --locked --no-default-features
+          cargo install elf2uf2-rs --version 2.2.0 --locked --no-default-features --force
       - name: build firmwares
         env:
           # Reported by the firmware via DAP_Info(0x09); the container checkout
@@ -33,6 +34,7 @@ jobs:
           RUST_DAP_VERSION: ${{ github.ref_name }}
         run: |
           (cd boards/rpi_pico && cargo build --release --bin rust-dap-raspberrypi-pico)
+          (cd boards/rpi_pico2 && cargo build --release --features swd)
           (cd boards/rpi_pico && cargo build --release --bin gdb_server \
              --features gdb-target-auto,gdb-target-rp2040,gdb-target-nrf52,gdb-target-nrf54)
           (cd boards/xiao_rp2040 && cargo build --release)
@@ -42,10 +44,14 @@ jobs:
           set -eu
           mkdir -p dist
           T=target/thumbv6m-none-eabi/release
+          T235=target/thumbv8m.main-none-eabihf/release
           V=${GITHUB_REF_NAME}
           # RP2040 boards: ELF (debug/flash-via-probe) + UF2 (drag-and-drop).
           cp "$T/rust-dap-raspberrypi-pico" "dist/rust-dap-cmsis-dap-rpi-pico-$V.elf"
           elf2uf2-rs "$T/rust-dap-raspberrypi-pico" "dist/rust-dap-cmsis-dap-rpi-pico-$V.uf2"
+          # RP2350/Pico 2: elf2uf2-rs 2.2.0 supports thumbv8m.main-none-eabihf.
+          cp "$T235/rust-dap-raspberrypi-pico2" "dist/rust-dap-cmsis-dap-rpi-pico2-$V.elf"
+          elf2uf2-rs "$T235/rust-dap-raspberrypi-pico2" "dist/rust-dap-cmsis-dap-rpi-pico2-$V.uf2"
           cp "$T/gdb_server" "dist/rust-dap-gdb-server-rpi-pico-$V.elf"
           elf2uf2-rs "$T/gdb_server" "dist/rust-dap-gdb-server-rpi-pico-$V.uf2"
           cp "$T/rust-dap-xiao-rp2040" "dist/rust-dap-cmsis-dap-xiao-rp2040-$V.elf"

@@ -12,7 +12,7 @@ jobs:
     strategy:
       max-parallel: 2
       matrix:
-        projects: ["rust-dap", "arm-debug", "rust-dap-rp2040", "uart-test", "boards/rpi_pico", "boards/xiao_m0", "boards/xiao_rp2040"]
+        projects: ["rust-dap", "arm-debug", "rust-dap-rp", "uart-test", "boards/rpi_pico", "boards/rpi_pico2", "boards/xiao_m0", "boards/xiao_rp2040"]
     container:
       image: rust:1.90-slim-bookworm
     steps:
@@ -21,7 +21,10 @@ jobs:
         run: rustup component add rustfmt clippy
       - name: target add thumbv6m-none-eabi
         run: rustup target add thumbv6m-none-eabi
-        if: ${{ startsWith(matrix.projects, 'boards') }}
+        if: ${{ startsWith(matrix.projects, 'boards') && matrix.projects != 'boards/rpi_pico2' }}
+      - name: target add thumbv8m.main-none-eabihf
+        run: rustup target add thumbv8m.main-none-eabihf
+        if: ${{ matrix.projects == 'boards/rpi_pico2' }}
       - name: install package dependencies
         run: apt-get update && apt-get -y install pkg-config libudev-dev
         if: ${{ matrix.projects == 'uart-test' }}
@@ -34,7 +37,7 @@ jobs:
       - name: cargo clippy for ${{ matrix.projects }}
         run: cargo clippy
         working-directory: ${{ matrix.projects }}
-        if: ${{ matrix.projects != 'boards/rpi_pico' }}
+        if: ${{ matrix.projects != 'boards/rpi_pico' && matrix.projects != 'boards/rpi_pico2' }}
       - name: cargo clippy for boards/rpi_pico
         run: |
           cargo clippy --features swd
@@ -46,6 +49,15 @@ jobs:
           cargo clippy --bin nrf52_probe --features selftest
         working-directory: ${{ matrix.projects }}
         if: ${{ matrix.projects  == 'boards/rpi_pico' }}
+      - name: cargo clippy for boards/rpi_pico2
+        run: |
+          cargo clippy --no-default-features --features swd
+          cargo clippy --no-default-features --features swd,bitbang
+          cargo clippy --no-default-features --features jtag
+          cargo clippy --no-default-features --features jtag,bitbang
+          cargo clippy --no-default-features --features swj
+        working-directory: boards/rpi_pico2
+        if: ${{ matrix.projects == 'boards/rpi_pico2' }}
       - name: cargo test for ${{ matrix.projects }}
         run: cargo test
         working-directory: ${{ matrix.projects }}
