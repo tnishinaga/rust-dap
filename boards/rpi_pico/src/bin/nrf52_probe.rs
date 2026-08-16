@@ -24,6 +24,8 @@
 #![no_std]
 #![no_main]
 
+const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
+
 use panic_halt as _;
 
 use arm_debug::ArmDebug;
@@ -140,7 +142,7 @@ fn main() -> ! {
     let pins = hal::gpio::Pins::new(pac.IO_BANK0, pac.PADS_BANK0, sio.gpio_bank0, &mut resets);
 
     let clocks = hal::clocks::init_clocks_and_plls(
-        12_000_000,
+        XOSC_CRYSTAL_FREQ,
         pac.XOSC,
         pac.CLOCKS,
         pac.PLL_SYS,

@@ -22,6 +22,8 @@
 #![no_std]
 #![no_main]
 
+const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
+
 #[cfg(feature = "gdb-target-rp2040")]
 use arm_debug::rp2040;
 use arm_debug::{cortex_m as cm, ArmDebug, HaltReason, WatchAccess};
@@ -1889,7 +1891,7 @@ mod app {
         );
 
         let clocks = hal::clocks::init_clocks_and_plls(
-            12_000_000,
+            XOSC_CRYSTAL_FREQ,
             ctx.device.XOSC,
             ctx.device.CLOCKS,
             ctx.device.PLL_SYS,

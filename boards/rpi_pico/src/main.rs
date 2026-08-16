@@ -17,6 +17,8 @@
 #![no_std]
 #![no_main]
 
+const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
+
 /// The linker will place this boot block at the start of our program image.
 /// We need this to help the ROM bootloader get our code up and running.
 /// W25Q080 matches the flash chip of this board; execute-in-SRAM builds use
@@ -59,6 +61,7 @@ mod app {
 
     use embedded_hal::digital::{OutputPin, StatefulOutputPin};
 
+    use crate::XOSC_CRYSTAL_FREQ;
     use rust_dap_rp::line_coding::*;
     use rust_dap_rp::util::UartConfigAndClock;
     // util::SwdIoSet/JtagIoSet select the PIO or bit-banging transport via
@@ -172,7 +175,7 @@ mod app {
 
         let mut watchdog = hal::Watchdog::new(c.device.WATCHDOG);
         let clocks = hal::clocks::init_clocks_and_plls(
-            12_000_000,
+            XOSC_CRYSTAL_FREQ,
             c.device.XOSC,
             c.device.CLOCKS,
             c.device.PLL_SYS,
