@@ -12,11 +12,9 @@ bitbang = ["rust-dap-rp/bitbang"]
 set_clock = ["rust-dap-rp/set_clock"]   # Enable swj_clock implementation for PIO and set appropriate SWCLK frequency. Otherwise, SWCLK is fixed to 15.625[MHz]
 ram-exec = ["rust-dap-rp/ram-exec"] # Execute-in-SRAM support
 
-[dependencies.rp-pico]
-version = "0.9"
-# Below is to take out "boot2" from the set of features.
-default-features = false
-features = [ "rt", "critical-section-impl" ]
+[dependencies.rp2040-hal]
+version = "0.12"
+features = ["rt", "critical-section-impl"]
 
 [dependencies]
 rust-dap = { path = "../../rust-dap" }

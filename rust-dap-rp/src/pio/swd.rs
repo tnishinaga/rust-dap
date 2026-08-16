@@ -180,7 +180,7 @@ where
 {
     #[rustfmt::skip]
     pub fn new(pio0: pac::PIO0, clk: pio0::Pin<C>, dat: pio0::Pin<D>, rst: pio0::Pin<E>, resets: &mut pac::RESETS) -> Self {
-        // rp2040-hal 0.10 dropped the type-level pin-number const; read it from
+        // rp2040-hal 0.12 uses an instance-level pin number; read it from
         // the (PIO-configured) pin instances. Forget them afterwards so their
         // Drop does not revert the pin function the PIO relies on.
         let clk_pin_id = clk.id().num;

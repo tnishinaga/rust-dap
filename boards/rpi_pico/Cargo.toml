@@ -66,10 +66,8 @@ name = "nrf52_probe"
 path = "src/bin/nrf52_probe.rs"
 required-features = ["selftest"]
 
-[dependencies.rp-pico]
-version = "0.9"
-# Below is to take out "boot2" from the set of features.
-default-features = false
+[dependencies.rp2040-hal]
+version = "0.12"
 features = ["rt", "critical-section-impl"]
 
 [dependencies.rust-dap-rp]

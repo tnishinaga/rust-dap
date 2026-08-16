@@ -39,7 +39,7 @@ unsafe fn pre_init() {
     rust_dap_rp::clear_spinlocks();
 }
 
-#[rtic::app(device = rp_pico::hal::pac, peripherals = true, dispatchers = [PIO1_IRQ_0])]
+#[rtic::app(device = rp2040_hal::pac, peripherals = true, dispatchers = [PIO1_IRQ_0])]
 mod app {
     #[cfg(not(feature = "defmt"))]
     use panic_halt as _;
@@ -49,7 +49,7 @@ mod app {
     use hal::clocks::Clock;
     use hal::gpio::{FunctionSioOutput, FunctionUart, Pin, PullDown};
     use hal::pac;
-    use rp_pico::hal;
+    use rp2040_hal as hal;
 
     use hal::usb::UsbBus;
     use usb_device::bus::UsbBusAllocator;
@@ -163,7 +163,7 @@ mod app {
     fn init(c: init::Context) -> (Shared, Local) {
         let mut resets = c.device.RESETS;
         let sio = hal::Sio::new(c.device.SIO);
-        let pins = rp_pico::Pins::new(
+        let pins = hal::gpio::Pins::new(
             c.device.IO_BANK0,
             c.device.PADS_BANK0,
             sio.gpio_bank0,
@@ -172,7 +172,7 @@ mod app {
 
         let mut watchdog = hal::Watchdog::new(c.device.WATCHDOG);
         let clocks = hal::clocks::init_clocks_and_plls(
-            rp_pico::XOSC_CRYSTAL_FREQ,
+            12_000_000,
             c.device.XOSC,
             c.device.CLOCKS,
             c.device.PLL_SYS,
@@ -396,7 +396,7 @@ mod app {
             )
         };
 
-        let usb_led = pins.led.into_push_pull_output();
+        let usb_led = pins.gpio25.into_push_pull_output();
         let (uart_rx_producer, uart_rx_consumer) = c.local.uart_rx_queue.split();
         let (uart_tx_producer, uart_tx_consumer) = c.local.uart_tx_queue.split();
 

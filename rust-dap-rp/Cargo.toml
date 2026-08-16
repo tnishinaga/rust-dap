@@ -12,11 +12,11 @@ default = ["rp2040"]
 rp2040 = [
     "dep:rp2040-boot2",
     "dep:rp2040-hal",
-    "dep:pio02",
+    "dep:pio",
     "dep:heapless",
     "dep:bitvec",
 ]
-rp2350 = ["dep:rp235x-hal", "dep:pio03", "dep:bitvec"]
+rp2350 = ["dep:rp235x-hal", "dep:pio", "dep:bitvec"]
 bitbang = [] # Use bit-banging transports instead of PIO
 set_clock = [] # Enable SWJ clock configuration for PIO. Otherwise, SWCLK is fixed to 15.625[MHz].
 ram-exec = ["rp2040"] # Execute-in-SRAM support (linker script only; pick boot2-ram-memcpy or provide your own boot2)
@@ -29,10 +29,9 @@ defmt = ["dep:defmt"]
 [dependencies]
 rust-dap = { path = "../rust-dap" }
 rp2040-boot2 = { version = "0.2", optional = true }
-rp2040-hal = { version = "0.10", optional = true }
+rp2040-hal = { version = "0.12", optional = true }
 rp235x-hal = { version = "0.4", optional = true }
-pio02 = { package = "pio", version = "0.2", optional = true }
-pio03 = { package = "pio", version = "0.3", optional = true }
+pio = { version = "0.3", optional = true }
 panic-halt = "0.2"
 cortex-m = "0.7"
 

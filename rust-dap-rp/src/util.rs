@@ -129,10 +129,6 @@ pub fn reset_to_bootloader() -> ! {
     // gpio_activity_pin_mask = 0, disable_interface_mask = 0 → expose both the
     // mass-storage and PICOBOOT interfaces.
     hal::rom_data::reset_to_usb_boot(0, 0);
-    // reset_to_usb_boot does not return, but the signature is not `!`.
-    loop {
-        cortex_m::asm::nop();
-    }
 }
 
 /// "1200 bps touch": if the host has set the USB-CDC line coding to 1200 baud,

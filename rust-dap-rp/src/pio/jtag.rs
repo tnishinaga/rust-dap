@@ -171,7 +171,7 @@ where
         srst: Option<pio0::Pin<Srst>>,
         resets: &mut pac::RESETS,
     ) -> Self {
-        // rp2040-hal 0.10: pin number is instance-level (`.id().num`), not a
+        // rp2040-hal 0.12: pin number is instance-level (`.id().num`), not a
         // type const. Forget the pins so Drop does not revert their PIO func.
         let tck_pin_id = tck.id().num;
         let tms_pin_id = tms.id().num;

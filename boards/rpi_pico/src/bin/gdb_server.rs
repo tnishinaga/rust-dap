@@ -26,7 +26,7 @@
 use arm_debug::rp2040;
 use arm_debug::{cortex_m as cm, ArmDebug, HaltReason, WatchAccess};
 use core::convert::Infallible;
-use rp_pico::hal;
+use rp2040_hal as hal;
 
 use gdbstub::common::{Signal, Tid};
 use gdbstub::conn::Connection;
@@ -1825,7 +1825,7 @@ unsafe fn pre_init() {
 /// atomic (thumbv6 supports load/store) instead of an RTIC shared resource.
 static USB_CONFIGURED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
-#[rtic::app(device = rp_pico::hal::pac, peripherals = true)]
+#[rtic::app(device = rp2040_hal::pac, peripherals = true)]
 mod app {
     use super::*;
     use usb_device::class_prelude::UsbBusAllocator;
@@ -1881,7 +1881,7 @@ mod app {
         let mut resets = ctx.device.RESETS;
         let mut watchdog = hal::Watchdog::new(ctx.device.WATCHDOG);
         let sio = hal::Sio::new(ctx.device.SIO);
-        let pins = rp_pico::Pins::new(
+        let pins = hal::gpio::Pins::new(
             ctx.device.IO_BANK0,
             ctx.device.PADS_BANK0,
             sio.gpio_bank0,
@@ -1889,7 +1889,7 @@ mod app {
         );
 
         let clocks = hal::clocks::init_clocks_and_plls(
-            rp_pico::XOSC_CRYSTAL_FREQ,
+            12_000_000,
             ctx.device.XOSC,
             ctx.device.CLOCKS,
             ctx.device.PLL_SYS,

@@ -25,10 +25,8 @@ compile_error!("select one of the rust-dap-rp features: rp2040 or rp2350");
 pub(crate) use rp2040_hal as hal;
 #[cfg(feature = "rp2350")]
 pub(crate) use rp235x_hal as hal;
-#[cfg(feature = "rp2040")]
-extern crate pio02 as pio_crate;
-#[cfg(feature = "rp2350")]
-extern crate pio03 as pio_crate;
+#[cfg(any(feature = "rp2040", feature = "rp2350"))]
+extern crate pio as pio_crate;
 
 // Transitional compatibility: the boot2 block is the board's responsibility
 // (it depends on the flash chip), so boards should provide their own
