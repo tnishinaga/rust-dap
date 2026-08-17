@@ -9,7 +9,7 @@ license = "Apache-2.0"
 
 [features]
 bitbang = ["rust-dap-rp/bitbang"]
-set_clock = ["rust-dap-rp/set_clock"]   # Enable swj_clock implementation for PIO and set appropriate SWCLK frequency. Otherwise, SWCLK is fixed to 15.625[MHz]
+set_clock = ["rust-dap-rp/set_clock"]   # Enable swj_clock implementation for PIO and set appropriate SWD/JTAG frequency. Without it, SWD uses SWCLK = system_clock / 8 and JTAG uses TCK = system_clock / 8
 ram-exec = ["rust-dap-rp/ram-exec"] # Execute-in-SRAM support
 
 [dependencies.rp2040-hal]

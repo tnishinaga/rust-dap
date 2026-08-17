@@ -18,7 +18,7 @@ rp2040 = [
 ]
 rp2350 = ["dep:rp235x-hal", "dep:pio", "dep:bitvec"]
 bitbang = [] # Use bit-banging transports instead of PIO
-set_clock = [] # Enable SWJ clock configuration for PIO. Otherwise, SWCLK is fixed to 15.625[MHz].
+set_clock = [] # Enable SWJ clock configuration for PIO. Without it, SWD uses SWCLK = system_clock / 8 and JTAG uses TCK = system_clock / 8.
 ram-exec = ["rp2040"] # Execute-in-SRAM support (linker script only; pick boot2-ram-memcpy or provide your own boot2)
 # Transitional: library-provided boot2 blocks. Boards should define their own
 # BOOT2_FIRMWARE static instead (the right block depends on the flash chip).

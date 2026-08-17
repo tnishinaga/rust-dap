@@ -29,16 +29,14 @@ pub mod pio0 {
 }
 use bitvec::prelude::*;
 
-use super::{swj_pins_program, DEFAULT_CORE_CLOCK, DEFAULT_PIO_DIVISOR};
+#[cfg(feature = "set_clock")]
+use super::{clock_divisor, default_swj_clock_hz};
+use super::{swj_pins_divisor, swj_pins_program, DEFAULT_PIO_DIVISOR};
 
 // TCKを1周期実行するのに必要なサイクル数
 // number of cycles required to send 1 TCK clock
 #[cfg(feature = "set_clock")]
 const NUM_OF_CYCLE_PER_TCK_CLOCK: u32 = 8;
-#[cfg(feature = "set_clock")]
-const DEFAULT_SWJ_CLOCK_HZ: u32 =
-    ((DEFAULT_CORE_CLOCK / NUM_OF_CYCLE_PER_TCK_CLOCK) as f32 / DEFAULT_PIO_DIVISOR) as u32;
-
 const MAX_IR_LENGTH: usize = 128;
 
 struct JtagPioContext {
@@ -54,6 +52,7 @@ pub struct JtagIoSet<Tck, Tms, Tdi, Tdo, Trst, Srst> {
     tdo_pin_id: u8,
     trst_pin_id: Option<u8>,
     srst_pin_id: Option<u8>,
+    system_clock_hz: u32,
     context: Option<JtagPioContext>,
     divisor: f32,
     _pins: core::marker::PhantomData<(Tck, Tms, Tdi, Tdo, Trst, Srst)>,
@@ -169,6 +168,7 @@ where
         tdo: pio0::Pin<Tdo>,
         trst: Option<pio0::Pin<Trst>>,
         srst: Option<pio0::Pin<Srst>>,
+        system_clock_hz: u32,
         resets: &mut pac::RESETS,
     ) -> Self {
         // rp2040-hal 0.12: pin number is instance-level (`.id().num`), not a
@@ -190,7 +190,7 @@ where
         };
 
         let program = jtag_pin_set();
-        let divisor = crate::pio::DEFAULT_PIO_DIVISOR;
+        let divisor = DEFAULT_PIO_DIVISOR;
 
         // Initialize and start PIO
         let (mut pio, sm0, _, _, _) = pio0.split(resets);
@@ -214,13 +214,14 @@ where
             tdo_pin_id,
             trst_pin_id,
             srst_pin_id,
+            system_clock_hz,
             context: Some(JtagPioContext {
                 pio,
                 running_sm,
                 rx_fifo: rx,
                 tx_fifo: tx,
             }),
-            divisor: DEFAULT_PIO_DIVISOR,
+            divisor,
             _pins: core::marker::PhantomData,
         };
 
@@ -235,16 +236,11 @@ impl<Tck, Tms, Tdi, Tdo, Trst, Srst> JtagIoSet<Tck, Tms, Tdi, Tdo, Trst, Srst> {
     #[cfg(feature = "set_clock")]
     fn set_clock(&mut self, frequency_hz: u32) {
         // Calculate divisor.
-        let divisor = if frequency_hz > 0 {
-            ((DEFAULT_CORE_CLOCK / NUM_OF_CYCLE_PER_TCK_CLOCK as u32) / frequency_hz) as f32
-        } else {
-            DEFAULT_PIO_DIVISOR
-        };
-        let divisor = if divisor < 1.0f32 {
-            DEFAULT_PIO_DIVISOR
-        } else {
-            divisor
-        };
+        let divisor = clock_divisor(
+            self.system_clock_hz,
+            frequency_hz,
+            NUM_OF_CYCLE_PER_TCK_CLOCK,
+        );
         self.divisor = divisor;
 
         // Stop SM, Reconstruct SM with new divisor.
@@ -281,8 +277,7 @@ impl<Tck, Tms, Tdi, Tdo, Trst, Srst> JtagIoSet<Tck, Tms, Tdi, Tdo, Trst, Srst> {
         // Calculate divisor.
         // set 0.1us = 10 MHz
         // core frequency(MHz) / 100(MHz) = 0.1us/clock
-        let system_clock = f32::try_from((DEFAULT_CORE_CLOCK / 1_000_000) as u16).unwrap();
-        let divisor = system_clock / 10f32;
+        let divisor = swj_pins_divisor(self.system_clock_hz);
 
         // Stop SM, Reconstruct SM with new program.
         let mut context = None;
@@ -320,7 +315,7 @@ impl<Tck, Tms, Tdi, Tdo, Trst, Srst> JtagIoSet<Tck, Tms, Tdi, Tdo, Trst, Srst> {
         let mut pio = context.pio;
         pio.uninstall(installed);
         let installed = pio.install(&jtag_pin_set()).unwrap();
-        let divisor = crate::pio::DEFAULT_PIO_DIVISOR;
+        let divisor = self.divisor;
         let (sm, rx_fifo, tx_fifo) = hal::pio::PIOBuilder::from_installed_program(installed)
             .set_pins(0, 1)
             .side_set_pin_base(0)
@@ -455,7 +450,7 @@ impl<Tck, Tms, Tdi, Tdo, Trst, Srst> JtagIoSet<Tck, Tms, Tdi, Tdo, Trst, Srst> {
         self.jtag_pin_set_program_interface(pin_out, pindirs);
         // Reset clock
         #[cfg(feature = "set_clock")]
-        self.set_clock(DEFAULT_SWJ_CLOCK_HZ);
+        self.set_clock(default_swj_clock_hz(self.system_clock_hz, 8));
     }
 
     fn write_tms(&mut self, tms: bool) {

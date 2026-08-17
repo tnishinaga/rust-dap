@@ -99,7 +99,14 @@ fn main() -> ! {
         let swclk = pins.gpio2.into_function::<FunctionPio0>();
         let swdio = pins.gpio3.into_function::<FunctionPio0>();
         let reset = pins.gpio4.into_function::<FunctionPio0>();
-        rust_dap_rp::util::SwdIoSet::new(pac.PIO0, swclk, swdio, reset, &mut pac.RESETS)
+        rust_dap_rp::util::SwdIoSet::new(
+            pac.PIO0,
+            swclk,
+            swdio,
+            reset,
+            clocks.system_clock.freq().to_Hz(),
+            &mut pac.RESETS,
+        )
     };
 
     #[cfg(all(feature = "swd", feature = "bitbang"))]
@@ -128,6 +135,7 @@ fn main() -> ! {
             tdo,
             Some(trst),
             Some(srst),
+            clocks.system_clock.freq().to_Hz(),
             &mut pac.RESETS,
         )
     };

@@ -18,7 +18,7 @@ default = ["swd"]
 bitbang = ["rust-dap-rp/bitbang"]
 set_clock = [
     "rust-dap-rp/set_clock",
-] # Enable swj_clock implementation for PIO and set appropriate SWCLK frequency. Otherwise, SWCLK is fixed to 15.625[MHz]
+] # Enable swj_clock implementation for PIO and set appropriate SWD/JTAG frequency. Without it, SWD uses SWCLK = system_clock / 8 and JTAG uses TCK = system_clock / 8
 jtag = []
 swd = []
 swj = ["bitbang"] # Combined SWD+JTAG with runtime DAP_Connect switching (bit-banging)

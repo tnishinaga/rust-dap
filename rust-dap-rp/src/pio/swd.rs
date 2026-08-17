@@ -26,12 +26,6 @@ use hal::gpio::PinId;
 use hal::pac::{self, PIO0};
 use hal::pio::{InstalledProgram, PIOExt};
 
-#[cfg(feature = "set_clock")]
-const CLK_CLOCK_CYCLE: usize = 8;
-#[cfg(feature = "set_clock")]
-const DEFAULT_SWJ_CLOCK_HZ: u32 =
-    ((125000000 / CLK_CLOCK_CYCLE) as f32 / DEFAULT_PIO_DIVISOR) as u32;
-
 struct SwdPioContext {
     pio: hal::pio::PIO<PIO0>,
     running_sm: hal::pio::StateMachine<hal::pio::PIO0SM0, hal::pio::Running>,
@@ -45,6 +39,7 @@ pub struct SwdIoSet<C, D, E> {
     #[allow(unused)]
     dat_pin_id: u8,
     rst_pin_id: u8,
+    system_clock_hz: u32,
     context: Option<SwdPioContext>,
     _pins: core::marker::PhantomData<(C, D, E)>,
 }
@@ -179,7 +174,7 @@ where
     E: PinId,
 {
     #[rustfmt::skip]
-    pub fn new(pio0: pac::PIO0, clk: pio0::Pin<C>, dat: pio0::Pin<D>, rst: pio0::Pin<E>, resets: &mut pac::RESETS) -> Self {
+    pub fn new(pio0: pac::PIO0, clk: pio0::Pin<C>, dat: pio0::Pin<D>, rst: pio0::Pin<E>, system_clock_hz: u32, resets: &mut pac::RESETS) -> Self {
         // rp2040-hal 0.12 uses an instance-level pin number; read it from
         // the (PIO-configured) pin instances. Forget them afterwards so their
         // Drop does not revert the pin function the PIO relies on.
@@ -196,13 +191,22 @@ where
         // install swj_pin to pull-up RESET PIN
         let (mut pio, sm0, _, _, _) = pio0.split(resets);
         let installed = pio.install(&program).unwrap();
-        let (sm, rx, tx) = Self::build_pio((0,5) ,0, (0,32),0, installed, DEFAULT_PIO_DIVISOR, sm0);
+        let (sm, rx, tx) = Self::build_pio(
+            (0, 5),
+            0,
+            (0, 32),
+            0,
+            installed,
+            DEFAULT_PIO_DIVISOR,
+            sm0,
+        );
         let running_sm = sm.start();
 
         Self {
             clk_pin_id,
             dat_pin_id,
             rst_pin_id,
+            system_clock_hz,
             context: Some(SwdPioContext {
                 pio,
                 running_sm,
@@ -263,16 +267,7 @@ impl<C, D, E> SwdIoSet<C, D, E> {
     #[cfg(feature = "set_clock")]
     fn set_clock(&mut self, frequency_hz: u32) {
         // Calculate divisor.
-        let divisor = if frequency_hz > 0 {
-            ((DEFAULT_CORE_CLOCK / 8) / frequency_hz) as f32
-        } else {
-            DEFAULT_PIO_DIVISOR
-        };
-        let divisor = if divisor < 1.0f32 {
-            DEFAULT_PIO_DIVISOR
-        } else {
-            divisor
-        };
+        let divisor = clock_divisor(self.system_clock_hz, frequency_hz, 8);
 
         // Stop SM, Reconstruct SM with new divisor.
         let mut context = None;
@@ -358,8 +353,7 @@ impl<C, D, E> SwdIoSet<C, D, E> {
         // Calculate divisor.
         // set 0.1us = 10 MHz
         // core frequency(MHz) / 100(MHz) = 0.1us/clock
-        let system_clock = f32::try_from((DEFAULT_CORE_CLOCK / 1_000_000) as u16).unwrap();
-        let divisor = system_clock / 10f32;
+        let divisor = swj_pins_divisor(self.system_clock_hz);
 
         // Stop SM, Reconstruct SM with new program.
         let mut context = None;
@@ -393,7 +387,7 @@ impl<C, D, E> SwdIoSet<C, D, E> {
         self.setup_all_pins_to_input_program();
         // Reset clock
         #[cfg(feature = "set_clock")]
-        self.set_clock(DEFAULT_SWJ_CLOCK_HZ);
+        self.set_clock(default_swj_clock_hz(self.system_clock_hz, 8));
     }
 }
 

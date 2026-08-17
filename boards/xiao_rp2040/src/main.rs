@@ -189,7 +189,14 @@ mod app {
                 swclk_pin.set_slew_rate(hal::gpio::OutputSlewRate::Fast);
                 swdio_pin.set_slew_rate(hal::gpio::OutputSlewRate::Fast);
                 reset_pin.set_slew_rate(hal::gpio::OutputSlewRate::Fast);
-                swdio = SwdIoSet::new(c.device.PIO0, swclk_pin, swdio_pin, reset_pin, &mut resets);
+                swdio = SwdIoSet::new(
+                    c.device.PIO0,
+                    swclk_pin,
+                    swdio_pin,
+                    reset_pin,
+                    clocks.system_clock.freq().to_Hz(),
+                    &mut resets,
+                );
             }
             rust_dap_rp::util::initialize_usb(
                 swdio,
