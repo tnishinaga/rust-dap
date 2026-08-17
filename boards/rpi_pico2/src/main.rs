@@ -46,6 +46,8 @@ compile_error!("select one transport feature: swd, jtag, or swj");
 pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
 
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
+const UART_RX_QUEUE_SIZE: usize = 256;
+const UART_TX_QUEUE_SIZE: usize = 128;
 
 #[rp235x_hal::entry]
 fn main() -> ! {
@@ -84,6 +86,10 @@ fn main() -> ! {
     let (uart_reader, uart_writer) = uart.split();
     let mut uart_reader = Some(uart_reader);
     let mut uart_writer = Some(uart_writer);
+    let mut uart_rx_queue = heapless::spsc::Queue::<u8, UART_RX_QUEUE_SIZE>::new();
+    let mut uart_tx_queue = heapless::spsc::Queue::<u8, UART_TX_QUEUE_SIZE>::new();
+    let (mut uart_rx_producer, mut uart_rx_consumer) = uart_rx_queue.split();
+    let (mut uart_tx_producer, mut uart_tx_consumer) = uart_tx_queue.split();
 
     let usb_allocator = UsbBusAllocator::new(hal::usb::UsbBus::new(
         pac.USB,
@@ -190,8 +196,10 @@ fn main() -> ! {
             led.toggle().ok();
         }
 
-        bridge::drain_usb_to_uart_tx(&mut usb_serial, &mut uart_writer);
-        bridge::drain_uart_rx_to_usb(&mut usb_serial, &mut uart_reader);
+        bridge::drain_usb_to_uart_tx(&mut usb_serial, &mut uart_tx_producer);
+        bridge::drain_uart_tx_queue(&mut uart_writer, &mut uart_tx_consumer);
+        bridge::drain_uart_rx_to_queue(&mut uart_reader, &mut uart_rx_producer);
+        bridge::drain_uart_rx_queue(&mut usb_serial, &mut uart_rx_consumer);
 
         if let Ok(expected_config) = UartConfig::try_from(usb_serial.line_coding()) {
             if expected_config != uart_config.config {

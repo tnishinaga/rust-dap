@@ -11,6 +11,7 @@ use embedded_hal_nb::serial::{Read, Write};
 use hal::pac::{UART0, UART1};
 use hal::uart::{Enabled, Reader, UartDevice, UartPeripheral, ValidUartPinout, Writer};
 use hal::usb::UsbBus;
+use heapless::spsc::{Consumer, Producer};
 use usbd_serial::SerialPort;
 
 pub trait SplitUart: UartDevice + Sized {
@@ -35,25 +36,55 @@ impl SplitUart for UART1 {
     }
 }
 
-pub fn drain_usb_to_uart_tx<D: UartDevice, P: ValidUartPinout<D>>(
+pub fn drain_usb_to_uart_tx<const N: usize>(
     usb_serial: &mut SerialPort<UsbBus>,
-    uart_writer: &mut Option<Writer<D, P>>,
+    uart_tx_producer: &mut Producer<u8, N>,
 ) {
-    let uart = uart_writer.as_mut().unwrap();
-    while let Ok(data) = read_usb_serial_byte_cs(usb_serial) {
-        if uart.write(data).is_err() {
+    while uart_tx_producer.ready() {
+        if let Ok(data) = read_usb_serial_byte_cs(usb_serial) {
+            uart_tx_producer.enqueue(data).unwrap();
+        } else {
             break;
         }
     }
 }
 
-pub fn drain_uart_rx_to_usb<D: UartDevice, P: ValidUartPinout<D>>(
-    usb_serial: &mut SerialPort<UsbBus>,
+pub fn drain_uart_tx_queue<D: UartDevice, P: ValidUartPinout<D>, const N: usize>(
+    uart_writer: &mut Option<Writer<D, P>>,
+    uart_tx_consumer: &mut Consumer<u8, N>,
+) {
+    let uart = uart_writer.as_mut().unwrap();
+    while let Some(data) = uart_tx_consumer.peek() {
+        if uart.write(*data).is_ok() {
+            uart_tx_consumer.dequeue().unwrap();
+        } else {
+            break;
+        }
+    }
+}
+
+pub fn drain_uart_rx_to_queue<D: UartDevice, P: ValidUartPinout<D>, const N: usize>(
     uart_reader: &mut Option<Reader<D, P>>,
+    uart_rx_producer: &mut Producer<u8, N>,
 ) {
     let uart = uart_reader.as_mut().unwrap();
-    while let Ok(data) = uart.read() {
-        if write_usb_serial_byte_cs(usb_serial, data).is_err() {
+    while uart_rx_producer.ready() {
+        if let Ok(data) = uart.read() {
+            uart_rx_producer.enqueue(data).unwrap();
+        } else {
+            break;
+        }
+    }
+}
+
+pub fn drain_uart_rx_queue<const N: usize>(
+    usb_serial: &mut SerialPort<UsbBus>,
+    uart_rx_consumer: &mut Consumer<u8, N>,
+) {
+    while let Some(data) = uart_rx_consumer.peek() {
+        if write_usb_serial_byte_cs(usb_serial, *data).is_ok() {
+            uart_rx_consumer.dequeue().unwrap();
+        } else {
             break;
         }
     }

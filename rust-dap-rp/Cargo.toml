@@ -16,7 +16,7 @@ rp2040 = [
     "dep:heapless",
     "dep:bitvec",
 ]
-rp2350 = ["dep:rp235x-hal", "dep:pio", "dep:bitvec"]
+rp2350 = ["dep:rp235x-hal", "dep:pio", "dep:heapless", "dep:bitvec"]
 bitbang = [] # Use bit-banging transports instead of PIO
 set_clock = [] # Enable SWJ clock configuration for PIO. Without it, SWD uses SWCLK = system_clock / 8 and JTAG uses TCK = system_clock / 8.
 ram-exec = ["rp2040"] # Execute-in-SRAM support (linker script only; pick boot2-ram-memcpy or provide your own boot2)

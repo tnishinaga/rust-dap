@@ -35,6 +35,7 @@ rust-dap = { path = "../../rust-dap" }
 panic-halt = "0.2"
 usb-device = { version = "0.3", features = ["control-buffer-256"] }
 embedded-hal = "1.0"
+heapless = "0.7"
 defmt = { version = "0.3", optional = true }
 defmt-rtt = { version = "0.4", optional = true }
 panic-probe = { version = "0.3", features = ["print-defmt"], optional = true }
