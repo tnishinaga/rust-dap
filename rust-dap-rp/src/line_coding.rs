@@ -19,6 +19,7 @@ use hal::uart;
 use usbd_serial;
 
 use core::convert::{From, TryFrom};
+use core::num::NonZeroU32;
 
 /// UART configuration conversion error
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -56,7 +57,8 @@ pub struct UartConfig {
     pub data_bits: UartDataBits,
     pub stop_bits: UartStopBits,
     pub parity_type: UartParityType,
-    pub data_rate: u32,
+    /// A zero baud rate causes a panic when the UART is reconfigured.
+    pub data_rate: NonZeroU32,
 }
 
 impl From<UartStopBits> for usbd_serial::StopBits {
@@ -176,7 +178,7 @@ impl From<uart::UartConfig> for UartConfig {
             data_bits: value.data_bits.into(),
             stop_bits: value.stop_bits.into(),
             parity_type: value.parity.into(),
-            data_rate: value.baudrate.raw(),
+            data_rate: NonZeroU32::new(value.baudrate.raw()).unwrap(),
         }
     }
 }
@@ -186,7 +188,7 @@ impl From<&UartConfig> for uart::UartConfig {
         config.data_bits = value.data_bits.into();
         config.stop_bits = value.stop_bits.into();
         config.parity = value.parity_type.into();
-        config.baudrate = fugit::HertzU32::from_raw(value.data_rate);
+        config.baudrate = fugit::HertzU32::from_raw(value.data_rate.get());
         config
     }
 }
@@ -196,7 +198,7 @@ impl TryFrom<&usbd_serial::LineCoding> for UartConfig {
         let data_bits = value.data_bits().try_into()?;
         let stop_bits = value.stop_bits().try_into()?;
         let parity_type = value.parity_type().try_into()?;
-        let data_rate = value.data_rate();
+        let data_rate = NonZeroU32::new(value.data_rate()).ok_or(UartConvertError::Incompatible)?;
         Ok(Self {
             data_bits,
             stop_bits,

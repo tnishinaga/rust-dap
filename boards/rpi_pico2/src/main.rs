@@ -526,6 +526,8 @@ mod app {
                 .lock(|uart| uart.as_mut().unwrap().0.enable_rx_interrupt());
         }
 
+        // A zero baud rate makes `UartConfig::try_from` fail, so
+        // `reconfigure_uart` is not called when the host closes the CDC port.
         if let Ok(expected_config) = c
             .shared
             .usb_serial
