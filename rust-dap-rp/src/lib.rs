@@ -67,3 +67,10 @@ pub unsafe fn clear_spinlocks() {
         SPINLOCK0_PTR.wrapping_add(i).write_volatile(1);
     }
 }
+
+/// Releases all SIO spinlocks on RP2350. RTIC applications bypass the HAL
+/// entry macro, so this must run before any critical section is entered.
+#[cfg(feature = "rp2350")]
+pub unsafe fn clear_spinlocks() {
+    rp235x_hal::sio::spinlock_reset();
+}

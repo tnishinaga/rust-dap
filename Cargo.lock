@@ -1540,6 +1540,7 @@ dependencies = [
 name = "rust-dap-raspberrypi-pico2"
 version = "0.2.0"
 dependencies = [
+ "cortex-m-rt",
  "defmt 0.3.100",
  "defmt-rtt",
  "embedded-hal 1.0.0",
@@ -1547,9 +1548,11 @@ dependencies = [
  "panic-halt",
  "panic-probe",
  "rp235x-hal",
+ "rtic",
  "rust-dap",
  "rust-dap-rp",
  "usb-device",
+ "usbd-serial",
 ]
 
 [[package]]
