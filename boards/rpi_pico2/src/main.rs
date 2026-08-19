@@ -1,69 +1,50 @@
-// Copyright 2021-2022 Kenta Ida
+// Copyright 2026 Kenta Ida
 //
 // SPDX-License-Identifier: Apache-2.0
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 #![no_std]
 #![no_main]
 
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
-/// The linker will place this boot block at the start of our program image.
-/// We need this to help the ROM bootloader get our code up and running.
-/// W25Q080 matches the flash chip of this board; execute-in-SRAM builds use
-/// the RAM_MEMCPY loader instead.
-#[cfg(feature = "ram-exec")]
-#[link_section = ".boot2"]
-#[no_mangle]
+/// Tell the RP2350 Boot ROM that this is an Arm executable image.
+#[link_section = ".start_block"]
 #[used]
-pub static BOOT2_FIRMWARE: [u8; 256] = rp2040_boot2::BOOT_LOADER_RAM_MEMCPY;
-#[cfg(not(feature = "ram-exec"))]
-#[link_section = ".boot2"]
-#[no_mangle]
-#[used]
-pub static BOOT2_FIRMWARE: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
+pub static IMAGE_DEF: rp235x_hal::block::ImageDef = rp235x_hal::block::ImageDef::secure_exe();
 
-/// `#[rtic::app]` bypasses `#[rp2040_hal::entry]`, so the SIO spinlocks that
-/// the hal entry point would normally release must be released here.
+/// `#[rtic::app]` bypasses the RP2350 HAL entry point, so release all SIO
+/// spinlocks before the first critical section is entered.
 #[cortex_m_rt::pre_init]
 unsafe fn pre_init() {
     rust_dap_rp::clear_spinlocks();
 }
 
-#[rtic::app(device = rp2040_hal::pac, peripherals = true, dispatchers = [PIO1_IRQ_0])]
+#[rtic::app(
+    device = rp235x_hal::pac,
+    peripherals = true,
+    dispatchers = [SW0_IRQ]
+)]
 mod app {
     #[cfg(not(feature = "defmt"))]
     use panic_halt as _;
     #[cfg(feature = "defmt")]
     use {defmt_rtt as _, panic_probe as _};
 
+    use embedded_hal::digital::{OutputPin, StatefulOutputPin};
     use hal::clocks::Clock;
     use hal::gpio::{FunctionSioOutput, FunctionUart, Pin, PullDown};
     use hal::pac;
-    use rp2040_hal as hal;
+    use rp235x_hal as hal;
 
-    use hal::usb::UsbBus;
     use usb_device::bus::UsbBusAllocator;
-
     use usb_device::prelude::*;
     use usbd_serial::SerialPort;
 
-    use embedded_hal::digital::{OutputPin, StatefulOutputPin};
-
     use crate::XOSC_CRYSTAL_FREQ;
+    use rust_dap_rp::bridge::{self, UartReader, UartWriter};
     use rust_dap_rp::line_coding::*;
     use rust_dap_rp::util::UartConfigAndClock;
+
     // util::SwdIoSet/JtagIoSet select the PIO or bit-banging transport via
     // the `bitbang` feature.
     #[cfg(feature = "swd")]
@@ -77,8 +58,6 @@ mod app {
         JtagTrstPin,
         JtagResetPin,
     >;
-    // Combined SWD+JTAG transport with runtime DAP_Connect(port) switching
-    // over one shared pin set (bit-banging only).
     #[cfg(feature = "swj")]
     type SwjIoSet = rust_dap_rp::bitbang::SwjIoSet<
         GpioSwClk,
@@ -94,7 +73,7 @@ mod app {
     type IoSet = JtagIoSet;
     #[cfg(feature = "swj")]
     type IoSet = SwjIoSet;
-    type UsbDap = rust_dap::CmsisDap<'static, UsbBus, IoSet, 64>;
+    type UsbDap = rust_dap::CmsisDap<'static, hal::usb::UsbBus, IoSet, 64>;
 
     // GPIO mappings
     type GpioUartTx = hal::gpio::bank0::Gpio0;
@@ -104,14 +83,15 @@ mod app {
     type GpioDebugOut = hal::gpio::bank0::Gpio15;
     type GpioDebugIrqOut = hal::gpio::bank0::Gpio28;
     type GpioDebugUsbIrqOut = hal::gpio::bank0::Gpio27;
-    // swd / swj shared clock, data and reset pins
+    // SWD / SWJ shared clock, data and reset pins
     #[cfg(any(feature = "swd", feature = "swj"))]
     type GpioSwClk = hal::gpio::bank0::Gpio2;
     #[cfg(any(feature = "swd", feature = "swj"))]
     type GpioSwdIo = hal::gpio::bank0::Gpio3;
     #[cfg(any(feature = "swd", feature = "swj"))]
     type GpioReset = hal::gpio::bank0::Gpio4;
-    // jtag / swj TCK/TMS reuse the swd clock/data pins; TDI/TDO/TRST are extra
+    // JTAG / SWJ TCK/TMS reuse the SWD clock/data pins; TDI/TDO/TRST are extra
+    // pins.
     #[cfg(feature = "jtag")]
     type JtagTckPin = hal::gpio::bank0::Gpio2;
     #[cfg(feature = "jtag")]
@@ -125,21 +105,19 @@ mod app {
     #[cfg(feature = "jtag")]
     type JtagResetPin = hal::gpio::bank0::Gpio4;
 
-    // UART Interrupt context
     const UART_RX_QUEUE_SIZE: usize = 256;
     const UART_TX_QUEUE_SIZE: usize = 128;
-    // UART Shared context
+
     type UartPins = (
-        hal::gpio::Pin<GpioUartTx, FunctionUart, PullDown>,
-        hal::gpio::Pin<GpioUartRx, FunctionUart, PullDown>,
+        Pin<GpioUartTx, FunctionUart, PullDown>,
+        Pin<GpioUartRx, FunctionUart, PullDown>,
     );
-    use rust_dap_rp::bridge::{self, UartReader, UartWriter};
 
     #[shared]
     struct Shared {
         uart_reader: Option<UartReader<pac::UART0, UartPins>>,
         uart_writer: Option<UartWriter<pac::UART0, UartPins>>,
-        usb_serial: SerialPort<'static, UsbBus>,
+        usb_serial: SerialPort<'static, hal::usb::UsbBus>,
         usb_dap: UsbDap,
         uart_rx_consumer: heapless::spsc::Consumer<'static, u8, UART_RX_QUEUE_SIZE>,
         uart_tx_producer: heapless::spsc::Producer<'static, u8, UART_TX_QUEUE_SIZE>,
@@ -150,7 +128,7 @@ mod app {
     struct Local {
         uart_config: UartConfigAndClock,
         uart_rx_producer: heapless::spsc::Producer<'static, u8, UART_RX_QUEUE_SIZE>,
-        usb_bus: UsbDevice<'static, UsbBus>,
+        usb_bus: UsbDevice<'static, hal::usb::UsbBus>,
         usb_led: Pin<GpioUsbLed, FunctionSioOutput, PullDown>,
         idle_led: Pin<GpioIdleLed, FunctionSioOutput, PullDown>,
         debug_out: Pin<GpioDebugOut, FunctionSioOutput, PullDown>,
@@ -161,8 +139,8 @@ mod app {
     #[init(local = [
         uart_rx_queue: heapless::spsc::Queue<u8, UART_RX_QUEUE_SIZE> = heapless::spsc::Queue::new(),
         uart_tx_queue: heapless::spsc::Queue<u8, UART_TX_QUEUE_SIZE> = heapless::spsc::Queue::new(),
-        USB_ALLOCATOR: Option<UsbBusAllocator<UsbBus>> = None,
-        ])]
+        USB_ALLOCATOR: Option<UsbBusAllocator<hal::usb::UsbBus>> = None,
+    ])]
     fn init(c: init::Context) -> (Shared, Local) {
         let mut resets = c.device.RESETS;
         let sio = hal::Sio::new(c.device.SIO);
@@ -197,29 +175,27 @@ mod app {
         let mut uart = hal::uart::UartPeripheral::new(c.device.UART0, uart_pins, &mut resets)
             .enable((&uart_config.config).into(), uart_config.clock)
             .unwrap();
-        // Enable RX interrupt. Note that TX interrupt is enabled when some TX data is available.
         uart.enable_rx_interrupt();
         let (uart_reader, uart_writer) = uart.split();
         let uart_reader = Some(UartReader(uart_reader));
         let uart_writer = Some(UartWriter(uart_writer));
 
         let usb_allocator = UsbBusAllocator::new(hal::usb::UsbBus::new(
-            c.device.USBCTRL_REGS,
-            c.device.USBCTRL_DPRAM,
+            c.device.USB,
+            c.device.USB_DPRAM,
             clocks.usb_clock,
             true,
             &mut resets,
         ));
         c.local.USB_ALLOCATOR.replace(usb_allocator);
         let usb_allocator = c.local.USB_ALLOCATOR.as_ref().unwrap();
+
         #[cfg(all(feature = "swd", feature = "bitbang"))]
         let (usb_serial, usb_dap, usb_bus) = {
             use rust_dap::{DapConfig, DapIdentity};
             use rust_dap_rp::bitbang::{CortexMDelay, PicoBidirPin};
             use rust_dap_rp::util::UsbIdentity;
-            // Initialize MCU reset pin.
-            // RESET pin of Cortex Debug 10-pin connector is negative logic
-            // https://developer.arm.com/documentation/101453/0100/CoreSight-Technology/Connectors
+
             let reset_pin = PicoBidirPin::new(pins.gpio4.into_floating_input());
             let swclk_pin = PicoBidirPin::new(pins.gpio2.into_floating_input());
             let swdio_pin = PicoBidirPin::new(pins.gpio3.into_floating_input());
@@ -228,12 +204,12 @@ mod app {
                 swdio,
                 usb_allocator,
                 UsbIdentity {
-                    serial: "raspberry-pi-pico-swd",
+                    serial: "raspberry-pi-pico-2-swd",
                     ..UsbIdentity::default()
                 },
                 DapConfig::new(
                     DapIdentity {
-                        serial_number: "raspberry-pi-pico-swd",
+                        serial_number: "raspberry-pi-pico-2-swd",
                         product_firmware_version: env!("GIT_REV"),
                         ..DapIdentity::default()
                     },
@@ -246,9 +222,7 @@ mod app {
         let (usb_serial, usb_dap, usb_bus) = {
             use rust_dap::{DapConfig, DapIdentity};
             use rust_dap_rp::util::UsbIdentity;
-            // Initialize MCU reset pin.
-            // RESET pin of Cortex Debug 10-pin connector is negative logic
-            // https://developer.arm.com/documentation/101453/0100/CoreSight-Technology/Connectors
+
             let mut swclk_pin = pins.gpio2.into_function::<hal::gpio::FunctionPio0>();
             let mut swdio_pin = pins.gpio3.into_function::<hal::gpio::FunctionPio0>();
             let mut reset_pin = pins.gpio4.into_function::<hal::gpio::FunctionPio0>();
@@ -268,12 +242,12 @@ mod app {
                 swdio,
                 usb_allocator,
                 UsbIdentity {
-                    serial: "raspberry-pi-pico-swd",
+                    serial: "raspberry-pi-pico-2-swd",
                     ..UsbIdentity::default()
                 },
                 DapConfig::new(
                     DapIdentity {
-                        serial_number: "raspberry-pi-pico-swd",
+                        serial_number: "raspberry-pi-pico-2-swd",
                         product_firmware_version: env!("GIT_REV"),
                         ..DapIdentity::default()
                     },
@@ -287,6 +261,7 @@ mod app {
             use rust_dap::{DapConfig, DapIdentity};
             use rust_dap_rp::bitbang::{CortexMDelay, PicoBidirPin};
             use rust_dap_rp::util::UsbIdentity;
+
             let tck_pin = PicoBidirPin::new(pins.gpio2.into_floating_input());
             let tms_pin = PicoBidirPin::new(pins.gpio3.into_floating_input());
             let tdo_pin = PicoBidirPin::new(pins.gpio5.into_floating_input());
@@ -306,12 +281,12 @@ mod app {
                 jtagio,
                 usb_allocator,
                 UsbIdentity {
-                    serial: "raspberry-pi-pico-jtag",
+                    serial: "raspberry-pi-pico-2-jtag",
                     ..UsbIdentity::default()
                 },
                 DapConfig::new(
                     DapIdentity {
-                        serial_number: "raspberry-pi-pico-jtag",
+                        serial_number: "raspberry-pi-pico-2-jtag",
                         product_firmware_version: env!("GIT_REV"),
                         ..DapIdentity::default()
                     },
@@ -324,7 +299,7 @@ mod app {
         let (usb_serial, usb_dap, usb_bus) = {
             use rust_dap::{DapConfig, DapIdentity};
             use rust_dap_rp::util::UsbIdentity;
-            // PIO
+
             let mut tck_pin = pins.gpio2.into_function::<hal::gpio::FunctionPio0>();
             let mut tms_pin = pins.gpio3.into_function::<hal::gpio::FunctionPio0>();
             let mut tdo_pin = pins.gpio5.into_function::<hal::gpio::FunctionPio0>();
@@ -337,6 +312,7 @@ mod app {
             tdi_pin.set_slew_rate(hal::gpio::OutputSlewRate::Fast);
             trst_pin.set_slew_rate(hal::gpio::OutputSlewRate::Fast);
             srst_pin.set_slew_rate(hal::gpio::OutputSlewRate::Fast);
+
             let jtagio = JtagIoSet::new(
                 c.device.PIO0,
                 tck_pin,
@@ -352,12 +328,12 @@ mod app {
                 jtagio,
                 usb_allocator,
                 UsbIdentity {
-                    serial: "raspberry-pi-pico-jtag",
+                    serial: "raspberry-pi-pico-2-jtag",
                     ..UsbIdentity::default()
                 },
                 DapConfig::new(
                     DapIdentity {
-                        serial_number: "raspberry-pi-pico-jtag",
+                        serial_number: "raspberry-pi-pico-2-jtag",
                         product_firmware_version: env!("GIT_REV"),
                         ..DapIdentity::default()
                     },
@@ -366,20 +342,20 @@ mod app {
             )
         };
 
-        // Combined SWD+JTAG over one shared pin set. GDB/probe-rs choose the
-        // protocol at runtime via DAP_Connect; the pins are reconfigured on
-        // connect. Bit-banging only (a single PIO program cannot serve both).
+        // SWJ switches between SWD and JTAG at runtime, so it intentionally
+        // uses the common bit-banging transport.
         #[cfg(feature = "swj")]
         let (usb_serial, usb_dap, usb_bus) = {
             use rust_dap::{DapConfig, DapIdentity};
             use rust_dap_rp::bitbang::{CortexMDelay, PicoBidirPin};
             use rust_dap_rp::util::UsbIdentity;
-            let clk_pin = PicoBidirPin::new(pins.gpio2.into_floating_input()); // SWCLK/TCK
-            let dio_pin = PicoBidirPin::new(pins.gpio3.into_floating_input()); // SWDIO/TMS
+
+            let clk_pin = PicoBidirPin::new(pins.gpio2.into_floating_input());
+            let dio_pin = PicoBidirPin::new(pins.gpio3.into_floating_input());
             let tdi_pin = PicoBidirPin::new(pins.gpio6.into_floating_input());
             let tdo_pin = PicoBidirPin::new(pins.gpio5.into_floating_input());
             let trst_pin = PicoBidirPin::new(pins.gpio7.into_floating_input());
-            let srst_pin = PicoBidirPin::new(pins.gpio4.into_floating_input()); // RESET/nSRST
+            let srst_pin = PicoBidirPin::new(pins.gpio4.into_floating_input());
             let swjio = SwjIoSet::new(
                 clk_pin,
                 dio_pin,
@@ -393,12 +369,12 @@ mod app {
                 swjio,
                 usb_allocator,
                 UsbIdentity {
-                    serial: "raspberry-pi-pico-swj",
+                    serial: "raspberry-pi-pico-2-swj",
                     ..UsbIdentity::default()
                 },
                 DapConfig::new(
                     DapIdentity {
-                        serial_number: "raspberry-pi-pico-swj",
+                        serial_number: "raspberry-pi-pico-2-swj",
                         product_firmware_version: env!("GIT_REV"),
                         ..DapIdentity::default()
                     },
@@ -421,6 +397,7 @@ mod app {
         pins.gpio16.into_push_pull_output().set_high().ok();
         let mut idle_led = pins.gpio17.into_push_pull_output();
         idle_led.set_high().ok();
+
         (
             Shared {
                 uart_reader,
@@ -444,7 +421,17 @@ mod app {
         )
     }
 
-    #[idle(shared = [uart_reader, uart_writer, usb_serial, uart_rx_consumer, uart_tx_producer, uart_tx_consumer], local = [idle_led])]
+    #[idle(
+        shared = [
+            uart_reader,
+            uart_writer,
+            usb_serial,
+            uart_rx_consumer,
+            uart_tx_producer,
+            uart_tx_consumer
+        ],
+        local = [idle_led]
+    )]
     fn idle(mut c: idle::Context) -> ! {
         loop {
             (&mut c.shared.usb_serial, &mut c.shared.uart_tx_producer).lock(
@@ -458,15 +445,12 @@ mod app {
                 },
             );
 
-            // Process RX data.
             let rx_dequeued = (&mut c.shared.usb_serial, &mut c.shared.uart_rx_consumer).lock(
                 |usb_serial, uart_rx_consumer| {
                     bridge::drain_uart_rx_queue(usb_serial, uart_rx_consumer)
                 },
             );
             if rx_dequeued {
-                // The RX queue has room again, so restart the UART RX interrupt
-                // in case uart_irq stopped it while the queue was full.
                 c.shared
                     .uart_reader
                     .lock(|uart| uart.as_mut().unwrap().0.enable_rx_interrupt());
@@ -478,7 +462,7 @@ mod app {
 
     #[task(
         binds = UART0_IRQ,
-        priority = 3,   // Higher priority than USBCTRL_IRQ and dap_process so that UART RX data is not lost during long DAP transfers.
+        priority = 3,
         shared = [uart_reader],
         local = [uart_rx_producer, debug_out, debug_irq_out],
     )]
@@ -494,9 +478,8 @@ mod app {
         c.local.debug_irq_out.set_low().ok();
     }
 
-    /// Processes CMSIS-DAP commands outside of the USB interrupt so that long
-    /// SWD/JTAG transfers (transfer retries, DAP_SWJ_Pins waits, etc.) cannot
-    /// block the UART interrupt.
+    /// Processes CMSIS-DAP commands outside of the USB interrupt so long
+    /// SWD/JTAG transfers cannot block the UART interrupt.
     #[task(priority = 1, shared = [usb_dap])]
     async fn dap_process(mut c: dap_process::Context) {
         c.shared.usb_dap.lock(|usb_dap| {
@@ -517,12 +500,10 @@ mod app {
             .lock(|usb_serial, usb_dap| c.local.usb_bus.poll(&mut [usb_serial, usb_dap]));
         if !poll_result {
             c.local.debug_usb_irq_out.set_low().ok();
-            return; // Nothing to do at this time...
+            return;
         }
-        // Defer DAP command processing to the low priority dap_process task.
         dap_process::spawn().ok();
 
-        // Process TX data.
         (&mut c.shared.usb_serial, &mut c.shared.uart_tx_producer).lock(
             |usb_serial, uart_tx_producer| {
                 bridge::drain_usb_to_uart_tx(usb_serial, uart_tx_producer)
@@ -534,21 +515,19 @@ mod app {
             },
         );
 
-        // Process RX data.
         let rx_dequeued = (&mut c.shared.usb_serial, &mut c.shared.uart_rx_consumer).lock(
             |usb_serial, uart_rx_consumer| {
                 bridge::drain_uart_rx_queue(usb_serial, uart_rx_consumer)
             },
         );
         if rx_dequeued {
-            // The RX queue has room again, so restart the UART RX interrupt
-            // in case uart_irq stopped it while the queue was full.
             c.shared
                 .uart_reader
                 .lock(|uart| uart.as_mut().unwrap().0.enable_rx_interrupt());
         }
 
-        // Check if the UART transmitter must be re-configured.
+        // A zero baud rate makes `UartConfig::try_from` fail, so
+        // `reconfigure_uart` is not called when the host closes the CDC port.
         if let Ok(expected_config) = c
             .shared
             .usb_serial

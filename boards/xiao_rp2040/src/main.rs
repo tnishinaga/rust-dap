@@ -17,6 +17,8 @@
 #![no_std]
 #![no_main]
 
+const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
+
 /// The linker will place this boot block at the start of our program image.
 /// We need this to help the ROM bootloader get our code up and running.
 /// W25Q080 matches the flash chip of this board; execute-in-SRAM builds use
@@ -36,17 +38,17 @@ pub static BOOT2_FIRMWARE: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 /// the hal entry point would normally release must be released here.
 #[cortex_m_rt::pre_init]
 unsafe fn pre_init() {
-    rust_dap_rp2040::clear_spinlocks();
+    rust_dap_rp::clear_spinlocks();
 }
 
-#[rtic::app(device = rp_pico::hal::pac, peripherals = true, dispatchers = [PIO1_IRQ_0])]
+#[rtic::app(device = rp2040_hal::pac, peripherals = true, dispatchers = [PIO1_IRQ_0])]
 mod app {
     use panic_halt as _;
 
     use hal::clocks::Clock;
     use hal::gpio::{FunctionSioOutput, FunctionUart, Pin, PullDown};
     use hal::pac;
-    use rp_pico::hal;
+    use rp2040_hal as hal;
 
     use hal::usb::UsbBus;
     use usb_device::bus::UsbBusAllocator;
@@ -56,10 +58,11 @@ mod app {
 
     use embedded_hal::digital::{OutputPin, StatefulOutputPin};
 
+    use crate::XOSC_CRYSTAL_FREQ;
     use rust_dap::{DapConfig, DapIdentity};
-    use rust_dap_rp2040::line_coding::*;
-    use rust_dap_rp2040::util::{UartConfigAndClock, UsbIdentity};
-    type SwdIoSet = rust_dap_rp2040::util::SwdIoSet<GpioSwClk, GpioSwdIo, GpioReset>;
+    use rust_dap_rp::line_coding::*;
+    use rust_dap_rp::util::{UartConfigAndClock, UsbIdentity};
+    type SwdIoSet = rust_dap_rp::util::SwdIoSet<GpioSwClk, GpioSwdIo, GpioReset>;
     type UsbDap = rust_dap::CmsisDap<'static, UsbBus, SwdIoSet, 64>;
 
     // GPIO mappings
@@ -82,7 +85,7 @@ mod app {
         hal::gpio::Pin<GpioUartTx, FunctionUart, PullDown>,
         hal::gpio::Pin<GpioUartRx, FunctionUart, PullDown>,
     );
-    use rust_dap_rp2040::bridge::{self, UartReader, UartWriter};
+    use rust_dap_rp::bridge::{self, UartReader, UartWriter};
 
     #[shared]
     struct Shared {
@@ -115,7 +118,7 @@ mod app {
     fn init(c: init::Context) -> (Shared, Local) {
         let mut resets = c.device.RESETS;
         let sio = hal::Sio::new(c.device.SIO);
-        let pins = rp_pico::Pins::new(
+        let pins = hal::gpio::Pins::new(
             c.device.IO_BANK0,
             c.device.PADS_BANK0,
             sio.gpio_bank0,
@@ -124,7 +127,7 @@ mod app {
 
         let mut watchdog = hal::Watchdog::new(c.device.WATCHDOG);
         let clocks = hal::clocks::init_clocks_and_plls(
-            rp_pico::XOSC_CRYSTAL_FREQ,
+            XOSC_CRYSTAL_FREQ,
             c.device.XOSC,
             c.device.CLOCKS,
             c.device.PLL_SYS,
@@ -171,7 +174,7 @@ mod app {
             let swdio;
             #[cfg(feature = "bitbang")]
             {
-                use rust_dap_rp2040::bitbang::{CortexMDelay, PicoBidirPin};
+                use rust_dap_rp::bitbang::{CortexMDelay, PicoBidirPin};
                 let swclk_pin = PicoBidirPin::new(pins.gpio2.into_floating_input());
                 let swdio_pin = PicoBidirPin::new(pins.gpio4.into_floating_input());
                 let reset_pin = PicoBidirPin::new(reset_pin);
@@ -186,9 +189,16 @@ mod app {
                 swclk_pin.set_slew_rate(hal::gpio::OutputSlewRate::Fast);
                 swdio_pin.set_slew_rate(hal::gpio::OutputSlewRate::Fast);
                 reset_pin.set_slew_rate(hal::gpio::OutputSlewRate::Fast);
-                swdio = SwdIoSet::new(c.device.PIO0, swclk_pin, swdio_pin, reset_pin, &mut resets);
+                swdio = SwdIoSet::new(
+                    c.device.PIO0,
+                    swclk_pin,
+                    swdio_pin,
+                    reset_pin,
+                    clocks.system_clock.freq().to_Hz(),
+                    &mut resets,
+                );
             }
-            rust_dap_rp2040::util::initialize_usb(
+            rust_dap_rp::util::initialize_usb(
                 swdio,
                 usb_allocator,
                 UsbIdentity {
@@ -206,7 +216,7 @@ mod app {
             )
         };
 
-        let usb_led = pins.led.into_push_pull_output();
+        let usb_led = pins.gpio25.into_push_pull_output();
         let (uart_rx_producer, uart_rx_consumer) = c.local.uart_rx_queue.split();
         let (uart_tx_producer, uart_tx_consumer) = c.local.uart_tx_queue.split();
 

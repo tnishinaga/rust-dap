@@ -34,7 +34,7 @@
 use panic_halt as _;
 
 use embedded_hal::digital::OutputPin;
-use rp_pico::hal;
+use rp2040_hal as hal;
 
 use hal::pac;
 
@@ -53,17 +53,17 @@ pub static mut BLINK_DELAY: u32 = 500_000;
 #[no_mangle]
 pub static mut BLINK_COUNT: u32 = 0;
 
-#[rp_pico::entry]
+#[rp2040_hal::entry]
 fn main() -> ! {
     let mut pac = pac::Peripherals::take().unwrap();
     let sio = hal::Sio::new(pac.SIO);
-    let pins = rp_pico::Pins::new(
+    let pins = hal::gpio::Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
-    let mut led = pins.led.into_push_pull_output();
+    let mut led = pins.gpio25.into_push_pull_output();
     let mut led_on = false;
 
     // SEGGER RTT channel 0 ("Terminal"): one log line per toggle, so the

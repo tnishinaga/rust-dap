@@ -1,0 +1,14 @@
+[build]
+target = "thumbv8m.main-none-eabihf"
+
+[alias]
+pico2-build = "build --target thumbv8m.main-none-eabihf --features swd"
+pico2-build-release = "build --release --target thumbv8m.main-none-eabihf --features swd"
+
+[target.thumbv8m.main-none-eabihf]
+runner = "elf2uf2-rs -d"
+rustflags = [
+    "-C", "link-arg=-Tlink.x",
+    "-C", "link-arg=--nmagic",
+    "-C", "target-cpu=cortex-m33",
+]

@@ -14,10 +14,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::hal;
 use crate::line_coding::UartConfig;
 use core::result::Result;
 use hal::usb::UsbBus;
-use rp2040_hal as hal;
 use rust_dap::{
     CmsisDap, DapConfig, DapTransport, USB_CLASS_MISCELLANEOUS, USB_PROTOCOL_IAD,
     USB_SUBCLASS_COMMON,
@@ -108,6 +108,7 @@ pub struct UartConfigAndClock {
 /// before the port state machine has settled. Observed on a Linux xHCI host
 /// as the port wedging into endless `SET_ADDRESS` timeouts (-62/-110) that
 /// only a physical replug cleared.
+#[cfg(feature = "rp2040")]
 pub fn usb_detach_for_reset() {
     unsafe {
         let usb = &*hal::pac::USBCTRL_REGS::ptr();
@@ -122,21 +123,19 @@ pub fn usb_detach_for_reset() {
 /// (equivalent to holding BOOTSEL at power-on). Never returns.
 ///
 /// Lets a host reflash the board without pressing the physical button.
+#[cfg(feature = "rp2040")]
 pub fn reset_to_bootloader() -> ! {
     usb_detach_for_reset();
     // gpio_activity_pin_mask = 0, disable_interface_mask = 0 → expose both the
     // mass-storage and PICOBOOT interfaces.
     hal::rom_data::reset_to_usb_boot(0, 0);
-    // reset_to_usb_boot does not return, but the signature is not `!`.
-    loop {
-        cortex_m::asm::nop();
-    }
 }
 
 /// "1200 bps touch": if the host has set the USB-CDC line coding to 1200 baud,
 /// reboot into the bootloader. Call this from the USB poll loop. This is the
 /// same convention Arduino/pico-sdk use, so `stty -F /dev/ttyACMx 1200`
 /// (or opening the port at 1200 baud) drops the board into BOOTSEL.
+#[cfg(feature = "rp2040")]
 pub fn bootsel_on_1200bps_touch(serial: &SerialPort<UsbBus>) {
     if serial.line_coding().data_rate() == 1200 {
         reset_to_bootloader();

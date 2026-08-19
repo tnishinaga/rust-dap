@@ -1,0 +1,44 @@
+[package]
+name = "rust-dap-raspberrypi-pico2"
+version = "0.2.0"
+authors = ["Kenta IDA <fuga@fugafuga.org>"]
+edition = "2021"
+license = "Apache-2.0"
+build = "build.rs"
+
+[features]
+default = ["swd"]
+bitbang = ["rust-dap-rp/bitbang"]
+set_clock = ["rust-dap-rp/set_clock"]
+jtag = []
+swd = []
+swj = ["bitbang"]
+defmt = [
+    "dep:defmt",
+    "dep:defmt-rtt",
+    "dep:panic-probe",
+    "rust-dap/defmt",
+    "rust-dap-rp/defmt",
+]
+
+[dependencies.rust-dap-rp]
+path = "../../rust-dap-rp"
+default-features = false
+features = ["rp2350"]
+
+[dependencies.rp235x-hal]
+version = "0.4"
+features = ["critical-section-impl", "rt"]
+
+[dependencies]
+rust-dap = { path = "../../rust-dap" }
+panic-halt = "0.2"
+cortex-m-rt = "0.7"
+rtic = { version = "2", features = ["thumbv8main-backend"] }
+usb-device = { version = "0.3", features = ["control-buffer-256"] }
+usbd-serial = "0.2"
+embedded-hal = "1.0"
+heapless = "0.7"
+defmt = { version = "0.3", optional = true }
+defmt-rtt = { version = "0.4", optional = true }
+panic-probe = { version = "0.3", features = ["print-defmt"], optional = true }

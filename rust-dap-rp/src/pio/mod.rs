@@ -15,21 +15,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::pio_crate as pio;
 use pio::Program;
-use rp2040_hal as hal;
 pub mod pio0 {
-    use crate::pio::hal::{self, gpio::FunctionPio0};
+    use crate::hal::{self, gpio::FunctionPio0};
     pub type Pin<P> = hal::gpio::Pin<P, FunctionPio0, hal::gpio::PullDown>;
 }
 
 pub mod jtag;
 pub mod swd;
 
-const DEFAULT_CORE_CLOCK: u32 = 125000000;
-/// Default PIO Divisor.
-/// Generate 125/8 = 15.625[MHz] SWCLK clock.
-/// Generate 125/8 = 15.625[MHz] TCK clock(max)
-const DEFAULT_PIO_DIVISOR: f32 = 1.0f32;
+#[cfg(feature = "set_clock")]
+use core::num::NonZeroU32;
+
+/// Default PIO divisor. A divisor of 1.0 makes the PIO state-machine clock
+/// equal to the board's system clock.
+const DEFAULT_PIO_DIVISOR: f32 = 1.0;
+
+#[cfg(feature = "set_clock")]
+fn clock_divisor(system_clock_hz: u32, frequency_hz: u32, cycles_per_clock: u32) -> f32 {
+    let (Some(system_clock_hz), Some(frequency_hz), Some(cycles_per_clock)) = (
+        NonZeroU32::new(system_clock_hz),
+        NonZeroU32::new(frequency_hz),
+        NonZeroU32::new(cycles_per_clock),
+    ) else {
+        return DEFAULT_PIO_DIVISOR;
+    };
+
+    (system_clock_hz.get() as f32 / cycles_per_clock.get() as f32 / frequency_hz.get() as f32)
+        .max(DEFAULT_PIO_DIVISOR)
+}
+
+#[cfg(feature = "set_clock")]
+fn default_swj_clock_hz(system_clock_hz: u32, cycles_per_clock: u32) -> u32 {
+    (system_clock_hz as f32 / cycles_per_clock as f32 / DEFAULT_PIO_DIVISOR) as u32
+}
+
+fn swj_pins_divisor(system_clock_hz: u32) -> f32 {
+    // The SWJ pin program consumes ten PIO cycles per wait_us unit.
+    (system_clock_hz as f32 / 10_000_000.0).max(DEFAULT_PIO_DIVISOR)
+}
 
 fn swj_pins_program() -> Program<{ pio::RP2040_MAX_PROGRAM_SIZE }> {
     type Assembler = pio::Assembler<{ pio::RP2040_MAX_PROGRAM_SIZE }>;

@@ -18,6 +18,7 @@
 //! applications. RTIC's `#[app]` macro cannot live in a library, so the
 //! boards keep their task skeletons and call into these functions.
 
+use crate::hal;
 use crate::line_coding::UartConfig;
 use crate::util::{read_usb_serial_byte_cs, write_usb_serial_byte_cs, UartConfigAndClock};
 use embedded_hal_nb::serial::{Read, Write};
@@ -25,7 +26,6 @@ use hal::pac::{UART0, UART1};
 use hal::uart::{Enabled, Reader, UartDevice, UartPeripheral, ValidUartPinout, Writer};
 use hal::usb::UsbBus;
 use heapless::spsc::{Consumer, Producer};
-use rp2040_hal as hal;
 use usbd_serial::SerialPort;
 
 /// UART reader half, wrapped so it can be an RTIC shared resource.
@@ -37,6 +37,30 @@ pub struct UartWriter<D: UartDevice, P: ValidUartPinout<D>>(pub Writer<D, P>);
 // between task contexts is sound.
 unsafe impl<D: UartDevice, P: ValidUartPinout<D>> Send for UartReader<D, P> {}
 unsafe impl<D: UartDevice, P: ValidUartPinout<D>> Send for UartWriter<D, P> {}
+
+/// Abstracts `split()`, which the HAL implements only on the concrete
+/// UART0/UART1 peripherals.
+pub trait SplitUart: UartDevice + Sized {
+    fn split<P: ValidUartPinout<Self>>(
+        uart: UartPeripheral<Enabled, Self, P>,
+    ) -> (Reader<Self, P>, Writer<Self, P>);
+}
+
+impl SplitUart for UART0 {
+    fn split<P: ValidUartPinout<Self>>(
+        uart: UartPeripheral<Enabled, Self, P>,
+    ) -> (Reader<Self, P>, Writer<Self, P>) {
+        uart.split()
+    }
+}
+
+impl SplitUart for UART1 {
+    fn split<P: ValidUartPinout<Self>>(
+        uart: UartPeripheral<Enabled, Self, P>,
+    ) -> (Reader<Self, P>, Writer<Self, P>) {
+        uart.split()
+    }
+}
 
 /// Moves data received from the USB serial into the UART TX queue.
 pub fn drain_usb_to_uart_tx<const N: usize>(
@@ -76,12 +100,11 @@ pub fn drain_uart_rx_queue<const N: usize>(
 ) -> bool {
     let mut dequeued = false;
     while let Some(data) = uart_rx_consumer.peek() {
-        match write_usb_serial_byte_cs(usb_serial, *data) {
-            Ok(_) => {
-                uart_rx_consumer.dequeue().unwrap();
-                dequeued = true;
-            }
-            _ => break,
+        if write_usb_serial_byte_cs(usb_serial, *data).is_ok() {
+            uart_rx_consumer.dequeue().unwrap();
+            dequeued = true;
+        } else {
+            break;
         }
     }
     usb_serial.flush().ok();
@@ -105,34 +128,10 @@ pub fn on_uart_rx_irq<D: UartDevice, P: ValidUartPinout<D>, const N: usize>(
         }
         if let Ok(data) = uart.0.read() {
             on_byte();
-            let _ = uart_rx_producer.enqueue(data).ok(); // Cannot fail: readiness was checked above.
+            let _ = uart_rx_producer.enqueue(data).ok();
         } else {
             break;
         }
-    }
-}
-
-/// Abstracts `split()`, which rp2040-hal implements only on the concrete
-/// UART0/UART1 peripherals.
-pub trait SplitUart: UartDevice + Sized {
-    fn split<P: ValidUartPinout<Self>>(
-        uart: UartPeripheral<Enabled, Self, P>,
-    ) -> (Reader<Self, P>, Writer<Self, P>);
-}
-
-impl SplitUart for UART0 {
-    fn split<P: ValidUartPinout<Self>>(
-        uart: UartPeripheral<Enabled, Self, P>,
-    ) -> (Reader<Self, P>, Writer<Self, P>) {
-        uart.split()
-    }
-}
-
-impl SplitUart for UART1 {
-    fn split<P: ValidUartPinout<Self>>(
-        uart: UartPeripheral<Enabled, Self, P>,
-    ) -> (Reader<Self, P>, Writer<Self, P>) {
-        uart.split()
     }
 }
 
@@ -145,8 +144,8 @@ pub fn reconfigure_uart<D: UartDevice + SplitUart, P: ValidUartPinout<D>>(
 ) {
     let reader = uart_reader.take().unwrap().0;
     let writer = uart_writer.take().unwrap().0;
-    let disabled = UartPeripheral::join(reader, writer).disable();
-    let enabled = disabled
+    let enabled = UartPeripheral::join(reader, writer)
+        .disable()
         .enable(expected_config.into(), uart_config.clock)
         .unwrap();
     uart_config.config = *expected_config;

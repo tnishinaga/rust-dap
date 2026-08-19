@@ -22,16 +22,18 @@
 #![no_std]
 #![no_main]
 
+const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
+
 use panic_halt as _;
 
 use arm_debug::{rp2040, ArmDebug};
 use core::fmt::Write as _;
-use rp_pico::hal;
+use rp2040_hal as hal;
 
 use hal::clocks::Clock;
 use hal::pac;
 use rust_dap::{DapConfig, DapIdentity};
-use rust_dap_rp2040::bitbang::{CortexMDelay, PicoBidirPin, SwdIoSet};
+use rust_dap_rp::bitbang::{CortexMDelay, PicoBidirPin, SwdIoSet};
 use usb_device::class_prelude::UsbBusAllocator;
 use usb_device::prelude::*;
 use usbd_serial::SerialPort;
@@ -130,16 +132,16 @@ fn m2_core_control(arm: &mut ArmDebug<Swd>, line: &mut heapless::String<256>) {
     );
 }
 
-#[rp_pico::entry]
+#[rp2040_hal::entry]
 fn main() -> ! {
     let pac = pac::Peripherals::take().unwrap();
     let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
     let mut resets = pac.RESETS;
     let sio = hal::Sio::new(pac.SIO);
-    let pins = rp_pico::Pins::new(pac.IO_BANK0, pac.PADS_BANK0, sio.gpio_bank0, &mut resets);
+    let pins = hal::gpio::Pins::new(pac.IO_BANK0, pac.PADS_BANK0, sio.gpio_bank0, &mut resets);
 
     let clocks = hal::clocks::init_clocks_and_plls(
-        rp_pico::XOSC_CRYSTAL_FREQ,
+        XOSC_CRYSTAL_FREQ,
         pac.XOSC,
         pac.CLOCKS,
         pac.PLL_SYS,
@@ -193,7 +195,7 @@ fn main() -> ! {
     loop {
         usb_dev.poll(&mut [&mut serial]);
         // 1200 bps touch → reboot into the bootloader (reflash without BOOTSEL).
-        rust_dap_rp2040::util::bootsel_on_1200bps_touch(&serial);
+        rust_dap_rp::util::bootsel_on_1200bps_touch(&serial);
         if result.is_none() && usb_dev.state() == UsbDeviceState::Configured {
             result = Some(run_selftest(&mut arm));
         }

@@ -16,17 +16,29 @@
 
 #![no_std]
 
+#[cfg(all(feature = "rp2040", feature = "rp2350"))]
+compile_error!("select exactly one of the rust-dap-rp features: rp2040 or rp2350");
+#[cfg(not(any(feature = "rp2040", feature = "rp2350")))]
+compile_error!("select one of the rust-dap-rp features: rp2040 or rp2350");
+
+#[cfg(feature = "rp2040")]
+pub(crate) use rp2040_hal as hal;
+#[cfg(feature = "rp2350")]
+pub(crate) use rp235x_hal as hal;
+#[cfg(any(feature = "rp2040", feature = "rp2350"))]
+extern crate pio as pio_crate;
+
 // Transitional compatibility: the boot2 block is the board's responsibility
 // (it depends on the flash chip), so boards should provide their own
 // BOOT2_FIRMWARE static. These features keep the old library-provided
 // behavior available during migration.
-#[cfg(feature = "boot2-ram-memcpy")]
+#[cfg(all(feature = "rp2040", feature = "boot2-ram-memcpy"))]
 #[link_section = ".boot2"]
 #[no_mangle]
 #[used]
 pub static BOOT2_FIRMWARE: [u8; 256] = rp2040_boot2::BOOT_LOADER_RAM_MEMCPY;
 
-#[cfg(feature = "boot2-w25q080")]
+#[cfg(all(feature = "rp2040", feature = "boot2-w25q080"))]
 #[link_section = ".boot2"]
 #[no_mangle]
 #[used]
@@ -46,6 +58,7 @@ pub mod util;
 /// # Safety
 /// Must only be called before interrupts are enabled and before any spinlock
 /// is in use (i.e. from `#[pre_init]`).
+#[cfg(feature = "rp2040")]
 pub unsafe fn clear_spinlocks() {
     const SIO_BASE: u32 = 0xd0000000;
     const SPINLOCK0_PTR: *mut u32 = (SIO_BASE + 0x100) as *mut u32;
@@ -53,4 +66,11 @@ pub unsafe fn clear_spinlocks() {
     for i in 0..SPINLOCK_COUNT {
         SPINLOCK0_PTR.wrapping_add(i).write_volatile(1);
     }
+}
+
+/// Releases all SIO spinlocks on RP2350. RTIC applications bypass the HAL
+/// entry macro, so this must run before any critical section is entered.
+#[cfg(feature = "rp2350")]
+pub unsafe fn clear_spinlocks() {
+    rp235x_hal::sio::spinlock_reset();
 }
